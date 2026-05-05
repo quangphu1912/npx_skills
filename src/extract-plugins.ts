@@ -2,10 +2,10 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readdir, stat, cp, rm, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, basename } from 'path';
+import { join } from 'path';
 import { homedir } from 'os';
 import { getCanonicalSkillsDir } from './installer.ts';
-import { addSkillToLock, getAllLockedSkills } from './skill-lock.ts';
+import { addSkillToLock, getAllLockedSkills, removeSkillFromLock } from './skill-lock.ts';
 import { detectStow, stageToGit, readStowConfig } from './stow.ts';
 import { track } from './telemetry.ts';
 
@@ -71,8 +71,8 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
     }
 
     try {
-      // Remove old extraction if exists
-      await rm(targetDir, { recursive: true, force: true }).catch(() => {});
+      // Remove old extraction if exists — surface errors so cp failure is attributable
+      await rm(targetDir, { recursive: true, force: true });
       await cp(ps.skillPath, targetDir, { recursive: true });
 
       await addSkillToLock(targetName, {
@@ -102,8 +102,10 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
       const targetDir = join(canonicalDir, name);
       if (existsSync(targetDir)) {
         await rm(targetDir, { recursive: true, force: true }).catch(() => {});
-        staleExtractions.push(name);
       }
+      // Always remove from lock even if the directory was already gone
+      await removeSkillFromLock(name);
+      staleExtractions.push(name);
     }
   }
 
@@ -112,11 +114,14 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
   const config = readStowConfig();
   if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && results.some((r) => r.action !== 'skipped')) {
     const changed = results.filter((r) => r.action !== 'skipped').map((r) => r.name);
-    stageToGit(
+    const gitResult = stageToGit(
       stowInfo.repoPath,
       changed.map((n) => join(canonicalDir, n)),
       `feat(skills): extract ${changed.length} plugin skill(s)`
     );
+    if (!gitResult.ok) {
+      p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
+    }
   }
 
   // Summary
@@ -154,22 +159,27 @@ async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkil
       const pluginDir = join(marketplaceDir, pluginName);
       if (!(await isDir(pluginDir))) continue;
 
-      // Pick latest version by mtime
+      // Pick latest version: semver sort for vX.Y.Z dirs, mtime fallback for others
       const versions = await readdirSafe(pluginDir);
       if (versions.length === 0) continue;
 
-      let latestVersion = versions[0];
-      let latestMtime = 0;
-      for (const v of versions) {
-        const vPath = join(pluginDir, v);
-        try {
-          const s = await stat(vPath);
-          if (s.isDirectory() && s.mtimeMs > latestMtime) {
-            latestMtime = s.mtimeMs;
-            latestVersion = v;
+      const semverRe = /^(\d+)\.(\d+)\.(\d+)/;
+      const sorted = [...versions].sort((a, b) => {
+        const ma = semverRe.exec(a);
+        const mb = semverRe.exec(b);
+        if (ma && mb) {
+          for (let i = 1; i <= 3; i++) {
+            const diff = Number(mb[i]) - Number(ma[i]);
+            if (diff !== 0) return diff;
           }
-        } catch { continue; }
-      }
+          return 0;
+        }
+        if (ma) return -1;
+        if (mb) return 1;
+        return 0;
+      });
+      const latestVersion = sorted[0];
+      if (!latestVersion) continue;
 
       const versionDir = join(pluginDir, latestVersion);
       const skillsDir = join(versionDir, 'skills');

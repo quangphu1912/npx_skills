@@ -1,8 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readdir, stat } from 'fs/promises';
-import { join, basename } from 'path';
-import { getCanonicalSkillsDir } from './installer.ts';
+import { join } from 'path';
 import { readStowConfig } from './stow.ts';
 import { getAllLockedSkills, getRemovedSkills } from './skill-lock.ts';
 import { runImport } from './import-skills.ts';

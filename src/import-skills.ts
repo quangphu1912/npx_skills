@@ -1,13 +1,20 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { symlink, mkdir, lstat, readlink, cp, readdir, rm, realpath } from 'fs/promises';
+import { symlink, mkdir, lstat, cp, rm, realpath } from 'fs/promises';
 import { existsSync } from 'fs';
-import { basename, join, resolve, relative, dirname } from 'path';
+import { basename, join, resolve, relative } from 'path';
 import { homedir } from 'os';
 import { getCanonicalSkillsDir, sanitizeName } from './installer.ts';
 import { addSkillToLock, removeFromRemoved } from './skill-lock.ts';
 import { detectStow, stageToGit, readStowConfig } from './stow.ts';
 import { track } from './telemetry.ts';
+
+function toHomeRelative(abs: string): string {
+  const home = homedir();
+  if (abs === home) return '~';
+  if (abs.startsWith(home + '/')) return '~' + abs.slice(home.length);
+  return abs;
+}
 
 export interface ImportOptions {
   global?: boolean;
@@ -68,8 +75,9 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
     if (existsSync(targetDir)) {
       const existingStat = await lstat(targetDir);
       if (existingStat.isSymbolicLink()) {
-        const existingTarget = await readlink(targetDir);
-        if (resolve(dirname(targetDir), existingTarget) === absolutePath) {
+        const existingReal = await realpath(targetDir).catch(() => null);
+        const sourceReal = await realpath(absolutePath).catch(() => absolutePath);
+        if (existingReal === sourceReal) {
           p.log.info(pc.dim(`Already imported: ${skillName}`));
           results.push({ name: skillName, success: true });
           continue;
@@ -84,7 +92,7 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
           continue;
         }
       }
-      if (!options.yes) {
+      if (!options.yes && !options.force) {
         const overwrite = await p.confirm({
           message: `${skillName} already exists. Overwrite?`,
         });
@@ -116,7 +124,7 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
       }
 
       // Update lock file
-      const homeRelative = absolutePath.replace(homedir(), '~');
+      const homeRelative = toHomeRelative(absolutePath);
       await addSkillToLock(skillName, {
         source: homeRelative,
         sourceType: 'local',
@@ -141,8 +149,15 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
   if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && results.some((r) => r.success)) {
     const successfulNames = results.filter((r) => r.success).map((r) => r.name);
     const message = `feat(skills): import ${successfulNames.join(', ')}`;
-    if (stageToGit(stowInfo.repoPath, successfulNames.map((n) => join(canonicalDir, n)), message)) {
+    const gitResult = stageToGit(
+      stowInfo.repoPath,
+      successfulNames.map((n) => join(canonicalDir, n)),
+      message
+    );
+    if (gitResult.ok) {
       p.log.info(pc.dim(`Git: committed import to ${stowInfo.repoPath}`));
+    } else {
+      p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
     }
   }
 

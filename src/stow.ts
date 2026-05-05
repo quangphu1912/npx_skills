@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname, resolve } from 'path';
-import { lstat, readdir } from 'fs/promises';
+import { lstat } from 'fs/promises';
 import { execFileSync } from 'child_process';
 import { homedir } from 'os';
 
@@ -88,11 +88,11 @@ function findGitRepo(startDir: string): string | null {
  */
 function hasUncommittedChanges(repoPath: string): boolean {
   try {
-    const result = execFileSync('git', ['status', '--porcelain'], {
-      cwd: repoPath,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const result = execFileSync(
+      'git',
+      ['--no-optional-locks', 'status', '--porcelain'],
+      { cwd: repoPath, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    );
     return result.trim().length > 0;
   } catch {
     return false;
@@ -101,8 +101,13 @@ function hasUncommittedChanges(repoPath: string): boolean {
 
 /**
  * Stage files to git in the stow repo.
+ * Returns { ok: true } on success, or { ok: false, error } with the git error message.
  */
-export function stageToGit(repoPath: string, paths: string[], message: string): boolean {
+export function stageToGit(
+  repoPath: string,
+  paths: string[],
+  message: string
+): { ok: boolean; error?: string } {
   try {
     for (const p of paths) {
       execFileSync('git', ['add', p], {
@@ -114,9 +119,9 @@ export function stageToGit(repoPath: string, paths: string[], message: string): 
       cwd: repoPath,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 

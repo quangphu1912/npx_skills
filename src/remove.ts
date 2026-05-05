@@ -224,7 +224,14 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
       }
 
       if (!isStillUsed) {
-        await rm(canonicalPath, { recursive: true, force: true });
+        const canonicalStat = await lstat(canonicalPath).catch(() => null);
+        if (canonicalStat?.isSymbolicLink()) {
+          // Imported skill — unlink the symlink only; never follow into the source
+          await rm(canonicalPath, { force: true });
+        } else if (canonicalStat?.isDirectory()) {
+          // Plugin extraction or GitHub install — remove the actual directory
+          await rm(canonicalPath, { recursive: true, force: true });
+        }
       }
 
       const lockEntry = isGlobal ? await getSkillFromLock(skillName) : null;
@@ -233,6 +240,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
       if (isGlobal) {
         await removeSkillFromLock(skillName);
+        // global-only by design — managed-sync only operates on the global store
         await addToRemoved(skillName, effectiveSource);
       }
 

@@ -319,8 +319,7 @@ export async function getRemovedSkills(): Promise<Set<string>> {
 
 export async function removeFromRemoved(skillName: string): Promise<void> {
   const lock = await readSkillLock();
-  if (lock.removed) {
-    delete lock.removed[skillName];
-    await writeSkillLock(lock);
-  }
+  if (!lock.removed || !(skillName in lock.removed)) return;
+  delete lock.removed[skillName];
+  await writeSkillLock(lock);
 }

@@ -1,15 +1,12 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readdir, lstat, symlink, rm, mkdir, realpath } from 'fs/promises';
-import { join, resolve, relative, dirname } from 'path';
-import { homedir } from 'os';
+import { join, relative } from 'path';
 import {
   getCanonicalSkillsDir,
   getAgentBaseDir,
-  sanitizeName,
 } from './installer.ts';
 import {
-  detectInstalledAgents,
   agents,
   getNonUniversalAgents,
   isUniversalAgent,
@@ -51,11 +48,14 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
   } catch {
     p.log.error(pc.red(`No canonical skills directory found at ${canonicalDir}`));
     p.log.info(pc.dim('Import skills first: skills import <path> -g'));
+    if (!options.quiet) p.outro(pc.yellow('Aborted'));
+    process.exitCode = 1;
     return;
   }
 
   if (skillNames.length === 0) {
     p.log.warn(pc.yellow('No skills found in canonical directory'));
+    if (!options.quiet) p.outro(pc.yellow('Nothing to distribute'));
     return;
   }
 
@@ -77,6 +77,7 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
 
   if (nonUniversalTargets.length === 0) {
     p.log.info(pc.dim('All target agents are universal — no symlinks needed'));
+    if (!options.quiet) p.outro(pc.green('Done!'));
     return;
   }
 
@@ -143,6 +144,30 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
 
   spinner.stop('Distribution complete');
 
+  // Prune stale symlinks from agent dirs (symlinks pointing into canonical that no longer exist)
+  const canonicalRealPath = await realpath(canonicalDir).catch(() => canonicalDir);
+  let pruned = 0;
+  for (const agentType of nonUniversalTargets) {
+    const agentBase = getAgentBaseDir(agentType, isGlobal, cwd);
+    let agentEntries: string[];
+    try {
+      agentEntries = await readdir(agentBase);
+    } catch {
+      continue;
+    }
+    for (const entry of agentEntries) {
+      const entryPath = join(agentBase, entry);
+      const entryStat = await lstat(entryPath).catch(() => null);
+      if (!entryStat?.isSymbolicLink()) continue;
+      const target = await realpath(entryPath).catch(() => null);
+      // Only prune symlinks that point into our canonical dir (not user-managed symlinks)
+      if (target && target.startsWith(canonicalRealPath + '/') && !skillNames.includes(entry)) {
+        await rm(entryPath, { force: true }).catch(() => {});
+        pruned++;
+      }
+    }
+  }
+
   // Summary
   const created = results.filter((r) => r.action === 'created');
   const skipped = results.filter((r) => r.action === 'skipped');
@@ -158,18 +183,25 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
     const alreadyValid = skipped.length;
     p.log.info(pc.dim(`${alreadyValid} symlink(s) already valid or skipped`));
   }
+  if (pruned > 0) {
+    p.log.info(pc.yellow(`Pruned ${pruned} stale symlink(s)`));
+  }
 
   // Git staging for stow-managed paths
   const config = readStowConfig();
   const stowInfo = await detectStow(canonicalDir);
   if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && created.length > 0) {
     const uniqueSkills = [...new Set(created.map((r) => r.skill))];
-    stageToGit(
+    const gitResult = stageToGit(
       stowInfo.repoPath,
       uniqueSkills.map((n) => join(canonicalDir, n)),
       `feat(skills): distribute ${uniqueSkills.join(', ')}`
     );
-    p.log.info(pc.dim(`Git: committed distribution to ${stowInfo.repoPath}`));
+    if (gitResult.ok) {
+      p.log.info(pc.dim(`Git: committed distribution to ${stowInfo.repoPath}`));
+    } else {
+      p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
+    }
   }
 
   track({
