@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, realpathSync } from 'fs';
 import { join, dirname, resolve } from 'path';
-import { lstat } from 'fs/promises';
+import { lstat, realpath } from 'fs/promises';
 import { execFileSync } from 'child_process';
 import { homedir } from 'os';
 
@@ -12,26 +12,32 @@ export interface StowInfo {
 
 /**
  * Walk up from `path` to detect if it's under a stow-managed symlink.
- * Stow creates symlinks like: ~/.agents → ~/dotfiles/agents/.agents
- * If the path is a symlink, resolve it and check if it points into a git repo.
+ * Handles two common stow patterns:
+ *   1. targetPath itself is the symlink:  ~/.agents/skills → dotfiles
+ *   2. targetPath's parent is the symlink: ~/.agents → dotfiles (more common)
  */
 export async function detectStow(targetPath: string): Promise<StowInfo> {
   try {
     const resolved = resolve(targetPath);
-    const parentDir = dirname(resolved);
 
-    // Check if the parent directory is a symlink (stow pattern)
+    // Pattern 1: targetPath itself is a stow-managed symlink
+    const targetStat = await lstat(resolved).catch(() => null);
+    if (targetStat?.isSymbolicLink()) {
+      const realTarget = await realpath(resolved);
+      const repoPath = findGitRepo(dirname(realTarget));
+      if (repoPath) {
+        return { isStow: true, repoPath, hasUncommittedChanges: hasUncommittedChanges(repoPath) };
+      }
+    }
+
+    // Pattern 2: parent directory is a stow-managed symlink
+    const parentDir = dirname(resolved);
     const parentStat = await lstat(parentDir);
     if (!parentStat.isSymbolicLink()) {
-      // Check if target itself is inside a known stow-managed location
       return detectStowByConfig(targetPath);
     }
 
-    // Resolve the symlink
-    const { realpath } = await import('fs/promises');
     const realParent = await realpath(parentDir);
-
-    // Check if the real path is inside a git repo
     const repoPath = findGitRepo(realParent);
     if (repoPath) {
       return {
@@ -57,7 +63,7 @@ function detectStowByConfig(targetPath: string): StowInfo {
   }
 
   const repoPath = config.stowRepoPath
-    ? config.stowRepoPath.replace(/^~/, homedir())
+    ? config.stowRepoPath.replace(/^~(?=\/|$)/, homedir())
     : null;
 
   return {
@@ -68,7 +74,7 @@ function detectStowByConfig(targetPath: string): StowInfo {
 }
 
 /**
- * Walk up from a directory to find the nearest .git.
+ * Walk up from a directory to find the nearest .git (file or directory).
  */
 function findGitRepo(startDir: string): string | null {
   let dir = startDir;
@@ -88,11 +94,11 @@ function findGitRepo(startDir: string): string | null {
  */
 function hasUncommittedChanges(repoPath: string): boolean {
   try {
-    const result = execFileSync(
-      'git',
-      ['--no-optional-locks', 'status', '--porcelain'],
-      { cwd: repoPath, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    );
+    const result = execFileSync('git', ['--no-optional-locks', 'status', '--porcelain'], {
+      cwd: repoPath,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
     return result.trim().length > 0;
   } catch {
     return false;
@@ -101,6 +107,10 @@ function hasUncommittedChanges(repoPath: string): boolean {
 
 /**
  * Stage files to git in the stow repo.
+ * Resolves symlinks to real paths before git add so that paths through stow
+ * symlinks are correctly resolved within the git worktree.
+ * Uses `git commit -- <paths>` to scope the commit to only our files,
+ * leaving any unrelated staged content untouched.
  * Returns { ok: true } on success, or { ok: false, error } with the git error message.
  */
 export function stageToGit(
@@ -109,13 +119,20 @@ export function stageToGit(
   message: string
 ): { ok: boolean; error?: string } {
   try {
-    for (const p of paths) {
+    const realPaths = paths.map((p) => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return p;
+      }
+    });
+    for (const p of realPaths) {
       execFileSync('git', ['add', p], {
         cwd: repoPath,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
     }
-    execFileSync('git', ['commit', '-m', message], {
+    execFileSync('git', ['commit', '-m', message, '--', ...realPaths], {
       cwd: repoPath,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -144,18 +161,32 @@ const DEFAULT_CONFIG: StowConfig = {
  */
 export function readStowConfig(): StowConfig {
   const configPath = join(homedir(), '.agents', '.skill-config.json');
+  let content: string;
   try {
-    const content = readFileSync(configPath, 'utf-8');
+    content = readFileSync(configPath, 'utf-8');
+  } catch {
+    return DEFAULT_CONFIG; // file doesn't exist — stow features disabled
+  }
+  try {
     const parsed = JSON.parse(content);
+    // Catch common typo: watchedDir (singular) instead of watchedDirs (plural)
+    if (parsed.watchedDir !== undefined && parsed.watchedDirs === undefined) {
+      process.stderr.write(
+        `Warning: .skill-config.json has "watchedDir" (singular) — did you mean "watchedDirs"?\n`
+      );
+    }
     return {
       stowManaged: parsed.stowManaged ?? DEFAULT_CONFIG.stowManaged,
       stowRepoPath: parsed.stowRepoPath ?? DEFAULT_CONFIG.stowRepoPath,
       watchedDirs: (parsed.watchedDirs ?? []).map((d: string) =>
-        d.replace(/^~/, homedir())
+        d.replace(/^~(?=\/|$)/, homedir())
       ),
       autoGit: parsed.autoGit ?? DEFAULT_CONFIG.autoGit,
     };
   } catch {
+    process.stderr.write(
+      `Warning: ~/.agents/.skill-config.json is not valid JSON — stow features disabled\n`
+    );
     return DEFAULT_CONFIG;
   }
 }

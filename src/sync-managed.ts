@@ -6,6 +6,7 @@ import { readStowConfig } from './stow.ts';
 import { getAllLockedSkills, getRemovedSkills } from './skill-lock.ts';
 import { runImport } from './import-skills.ts';
 import { runDistribute } from './distribute.ts';
+import { sanitizeName } from './installer.ts';
 import { track } from './telemetry.ts';
 
 export interface SyncManagedOptions {
@@ -51,16 +52,15 @@ export async function runSyncManaged(options: SyncManagedOptions): Promise<void>
           continue;
         }
 
-        // Check if not already tracked and not explicitly removed
-        if (!lockedNames.has(skillName) && !removedNames.has(skillName)) {
+        // Sanitize to match lock file keys (lock keys use sanitizeName, dir names may not)
+        const sanitized = sanitizeName(skillName);
+        if (!lockedNames.has(sanitized) && !removedNames.has(sanitized)) {
           newSkills.push(join(watchedDir, skillName));
         }
       }
 
       if (newSkills.length > 0) {
-        p.log.info(
-          `Found ${pc.cyan(String(newSkills.length))} new skill(s) in ${watchedDir}`
-        );
+        p.log.info(`Found ${pc.cyan(String(newSkills.length))} new skill(s) in ${watchedDir}`);
         await runImport(newSkills, { global: isGlobal, yes: options.yes, quiet: true });
       } else {
         p.log.info(pc.dim(`No new skills in ${watchedDir}`));

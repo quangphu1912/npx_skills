@@ -48,7 +48,7 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
   const results: Array<{ name: string; success: boolean; error?: string }> = [];
 
   for (const inputPath of expandedPaths) {
-    const resolvedPath = inputPath.replace(/^~/, homedir());
+    const resolvedPath = inputPath.replace(/^~(?=\/|$)/, homedir());
     const absolutePath = resolve(cwd, resolvedPath);
 
     // Check source exists
@@ -68,7 +68,14 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
       continue;
     }
 
-    const skillName = options.name ?? sanitizeName(basename(absolutePath));
+    // --name only makes sense for single-path imports; warn and ignore for multi-path
+    if (options.name && expandedPaths.length > 1) {
+      p.log.warn(pc.yellow('--name is ignored when importing multiple paths'));
+    }
+    const skillName =
+      options.name && expandedPaths.length === 1
+        ? options.name
+        : sanitizeName(basename(absolutePath));
     const targetDir = join(canonicalDir, skillName);
 
     // Check if already exists
@@ -88,7 +95,11 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
           p.log.error(
             `${skillName} exists as a real directory (not a symlink). Use --force to overwrite.`
           );
-          results.push({ name: skillName, success: false, error: 'Exists as real directory (use --force)' });
+          results.push({
+            name: skillName,
+            success: false,
+            error: 'Exists as real directory (use --force)',
+          });
           continue;
         }
       }
@@ -106,6 +117,22 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
     try {
       await mkdir(canonicalDir, { recursive: true });
 
+      // Guard against importing from within the canonical dir itself (self-referential symlink)
+      const resolvedCanonical = await realpath(canonicalDir).catch(() => canonicalDir);
+      const resolvedSource = await realpath(absolutePath).catch(() => absolutePath);
+      if (
+        resolvedSource === resolvedCanonical ||
+        resolvedSource.startsWith(resolvedCanonical + '/')
+      ) {
+        p.log.error(`Cannot import from inside the canonical skills directory`);
+        results.push({
+          name: skillName,
+          success: false,
+          error: 'Source is inside canonical dir (would create self-referential symlink)',
+        });
+        continue;
+      }
+
       if (options.copy) {
         // Copy mode
         await rm(targetDir, { recursive: true, force: true }).catch(() => {});
@@ -115,8 +142,6 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
         // Symlink mode (default)
         await rm(targetDir, { recursive: true, force: true }).catch(() => {});
 
-        const resolvedCanonical = await realpath(canonicalDir).catch(() => canonicalDir);
-        const resolvedSource = await realpath(absolutePath).catch(() => absolutePath);
         const relativePath = relative(resolvedCanonical, resolvedSource);
         const symlinkType = process.platform === 'win32' ? 'junction' : undefined;
         await symlink(relativePath, targetDir, symlinkType);

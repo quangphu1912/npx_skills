@@ -208,29 +208,37 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         }
       }
 
-      // Only remove the canonical path if no other installed agents are using it.
-      // This prevents breaking other agents when uninstalling from a specific agent (#287).
-      const installedAgents = await detectInstalledAgents();
-      const remainingAgents = installedAgents.filter((a) => !targetAgents.includes(a));
+      // Agent-scoped removes (--agent foo) only clean per-agent symlinks.
+      // Canonical is only removed for full global removes (no --agent scope).
+      const isFullRemove = !options.agent || options.agent.length === 0;
 
-      let isStillUsed = false;
-      for (const agentKey of remainingAgents) {
-        const path = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
-        const exists = await lstat(path).catch(() => null);
-        if (exists) {
-          isStillUsed = true;
-          break;
+      let canonicalDeleted = false;
+      if (isFullRemove) {
+        // Check if any remaining agent still has the skill before removing canonical.
+        const installedAgents = await detectInstalledAgents();
+        const remainingAgents = installedAgents.filter((a) => !targetAgents.includes(a));
+
+        let isStillUsed = false;
+        for (const agentKey of remainingAgents) {
+          const path = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
+          const exists = await lstat(path).catch(() => null);
+          if (exists) {
+            isStillUsed = true;
+            break;
+          }
         }
-      }
 
-      if (!isStillUsed) {
-        const canonicalStat = await lstat(canonicalPath).catch(() => null);
-        if (canonicalStat?.isSymbolicLink()) {
-          // Imported skill — unlink the symlink only; never follow into the source
-          await rm(canonicalPath, { force: true });
-        } else if (canonicalStat?.isDirectory()) {
-          // Plugin extraction or GitHub install — remove the actual directory
-          await rm(canonicalPath, { recursive: true, force: true });
+        if (!isStillUsed) {
+          const canonicalStat = await lstat(canonicalPath).catch(() => null);
+          if (canonicalStat?.isSymbolicLink()) {
+            // Imported skill — unlink the symlink only; never follow into the source
+            await rm(canonicalPath, { force: true });
+            canonicalDeleted = true;
+          } else if (canonicalStat?.isDirectory()) {
+            // Plugin extraction or GitHub install — remove the actual directory
+            await rm(canonicalPath, { recursive: true, force: true });
+            canonicalDeleted = true;
+          }
         }
       }
 
@@ -240,8 +248,10 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
       if (isGlobal) {
         await removeSkillFromLock(skillName);
-        // global-only by design — managed-sync only operates on the global store
-        await addToRemoved(skillName, effectiveSource);
+        // Only track as removed when canonical was fully deleted (full global remove, not agent-scoped).
+        if (canonicalDeleted) {
+          await addToRemoved(skillName, effectiveSource);
+        }
       }
 
       results.push({

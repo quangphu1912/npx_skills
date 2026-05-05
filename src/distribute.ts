@@ -2,15 +2,8 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readdir, lstat, symlink, rm, mkdir, realpath } from 'fs/promises';
 import { join, relative } from 'path';
-import {
-  getCanonicalSkillsDir,
-  getAgentBaseDir,
-} from './installer.ts';
-import {
-  agents,
-  getNonUniversalAgents,
-  isUniversalAgent,
-} from './agents.ts';
+import { getCanonicalSkillsDir, getAgentBaseDir } from './installer.ts';
+import { agents, getNonUniversalAgents, isUniversalAgent } from './agents.ts';
 import { readStowConfig, detectStow, stageToGit } from './stow.ts';
 import { track } from './telemetry.ts';
 import type { AgentType } from './types.ts';
@@ -116,7 +109,9 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
         const existing = await lstat(agentSkillPath).catch(() => null);
         if (existing?.isSymbolicLink()) {
           const resolvedExisting = await realpath(agentSkillPath).catch(() => '');
-          const resolvedCanonical = await realpath(canonicalSkillPath).catch(() => canonicalSkillPath);
+          const resolvedCanonical = await realpath(canonicalSkillPath).catch(
+            () => canonicalSkillPath
+          );
           if (resolvedExisting === resolvedCanonical) {
             results.push({ skill: skillName, agent: agent.displayName, action: 'skipped' });
             continue;
@@ -231,7 +226,7 @@ export function parseDistributeOptions(args: string[]): {
     } else if (arg === '-a' || arg === '--agent') {
       options.agent = options.agent || [];
       i++;
-      while (i < args.length && args[i] && !args[i].startsWith('-')) {
+      while (i < args.length && args[i] && !args[i]!.startsWith('-')) {
         options.agent.push(args[i]!);
         i++;
       }

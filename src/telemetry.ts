@@ -48,12 +48,39 @@ interface SyncTelemetryData {
   agents: string;
 }
 
+interface ImportTelemetryData {
+  event: 'import';
+  skillCount: string;
+  mode: string;
+}
+
+interface DistributeTelemetryData {
+  event: 'distribute';
+  skillCount: string;
+  agentCount: string;
+  created: string;
+}
+
+interface SyncManagedTelemetryData {
+  event: 'sync-managed';
+  watchedDirs: string;
+}
+
+interface ExtractPluginsTelemetryData {
+  event: 'extract-plugins';
+  skillCount: string;
+}
+
 type TelemetryData =
   | InstallTelemetryData
   | RemoveTelemetryData
   | UpdateTelemetryData
   | FindTelemetryData
-  | SyncTelemetryData;
+  | SyncTelemetryData
+  | ImportTelemetryData
+  | DistributeTelemetryData
+  | SyncManagedTelemetryData
+  | ExtractPluginsTelemetryData;
 
 let cliVersion: string | null = null;
 

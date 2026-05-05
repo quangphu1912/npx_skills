@@ -58,7 +58,11 @@ export interface SkillLockFile {
   dismissed?: DismissedPrompts;
   /** Last selected agents for installation */
   lastSelectedAgents?: string[];
-  /** Skills explicitly removed by user — managed-sync should not re-import them */
+  /**
+   * Skills explicitly removed by user — managed-sync should not re-import them.
+   * IMPORTANT: this field must be preserved across version migrations (see readSkillLock).
+   * Only `skills` is wiped on schema version bumps; user-intent fields survive.
+   */
   removed?: Record<string, string>;
 }
 
@@ -92,10 +96,13 @@ export async function readSkillLock(): Promise<SkillLockFile> {
       return createEmptyLockFile();
     }
 
-    // If old version, wipe and start fresh (backwards incompatible change)
-    // v3 adds skillFolderHash - we want fresh installs to populate it
+    // If old version, wipe skills but preserve user state (removed list, dismissed prompts)
     if (parsed.version < CURRENT_VERSION) {
-      return createEmptyLockFile();
+      const fresh = createEmptyLockFile();
+      fresh.dismissed = parsed.dismissed ?? {};
+      if (parsed.removed) fresh.removed = parsed.removed;
+      if (parsed.lastSelectedAgents) fresh.lastSelectedAgents = parsed.lastSelectedAgents;
+      return fresh;
     }
 
     return parsed;

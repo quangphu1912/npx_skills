@@ -50,12 +50,12 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
 
   await mkdir(canonicalDir, { recursive: true });
 
-  const results: Array<{ name: string; action: 'copied' | 'updated' | 'skipped'; error?: string }> = [];
+  const results: Array<{ name: string; action: 'copied' | 'updated' | 'skipped'; error?: string }> =
+    [];
   const extractedNames = new Set<string>();
 
   for (const ps of allPluginSkills) {
     const targetName = `${ps.pluginName}-${ps.skillName}`;
-    extractedNames.add(targetName);
     const targetDir = join(canonicalDir, targetName);
 
     // Skip if already extracted with same version
@@ -66,6 +66,7 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
       existing.pluginName === ps.pluginName &&
       existing.pluginVersion === ps.version
     ) {
+      extractedNames.add(targetName); // valid — keep in extractedNames so stale cleanup skips it
       results.push({ name: targetName, action: 'skipped' });
       continue;
     }
@@ -73,7 +74,9 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
     try {
       // Remove old extraction if exists — surface errors so cp failure is attributable
       await rm(targetDir, { recursive: true, force: true });
-      await cp(ps.skillPath, targetDir, { recursive: true });
+      // dereference:true copies symlinks as real files so extractions don't dangle
+      // when the plugin version directory is garbage-collected
+      await cp(ps.skillPath, targetDir, { recursive: true, dereference: true });
 
       await addSkillToLock(targetName, {
         source: `plugin:${ps.marketplace}/${ps.pluginName}`,
@@ -84,6 +87,7 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
         pluginVersion: ps.version,
       });
 
+      extractedNames.add(targetName); // only after successful extraction
       const action = existing ? 'updated' : 'copied';
       results.push({ name: targetName, action });
     } catch (err) {
@@ -100,9 +104,7 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
   for (const [name, entry] of Object.entries(lockedSkills)) {
     if (entry.sourceType === 'plugin' && !extractedNames.has(name)) {
       const targetDir = join(canonicalDir, name);
-      if (existsSync(targetDir)) {
-        await rm(targetDir, { recursive: true, force: true }).catch(() => {});
-      }
+      await rm(targetDir, { recursive: true, force: true }).catch(() => {});
       // Always remove from lock even if the directory was already gone
       await removeSkillFromLock(name);
       staleExtractions.push(name);
@@ -112,7 +114,12 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
   // Stage to git if stow-managed
   const stowInfo = await detectStow(canonicalDir);
   const config = readStowConfig();
-  if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && results.some((r) => r.action !== 'skipped')) {
+  if (
+    stowInfo.isStow &&
+    config.autoGit &&
+    stowInfo.repoPath &&
+    results.some((r) => r.action !== 'skipped')
+  ) {
     const changed = results.filter((r) => r.action !== 'skipped').map((r) => r.name);
     const gitResult = stageToGit(
       stowInfo.repoPath,
@@ -134,7 +141,8 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
   if (copied.length > 0) p.log.success(pc.green(`Copied ${copied.length} new skill(s)`));
   if (updated.length > 0) p.log.info(pc.cyan(`Updated ${updated.length} skill(s)`));
   if (skipped.length > 0) p.log.info(pc.dim(`Skipped ${skipped.length} unchanged skill(s)`));
-  if (staleExtractions.length > 0) p.log.info(pc.yellow(`Cleaned ${staleExtractions.length} stale extraction(s)`));
+  if (staleExtractions.length > 0)
+    p.log.info(pc.yellow(`Cleaned ${staleExtractions.length} stale extraction(s)`));
   if (failed.length > 0) {
     p.log.error(pc.red(`Failed ${failed.length} skill(s)`));
     for (const r of failed) p.log.message(`  ${pc.red('✗')} ${r.name}: ${r.error}`);
@@ -172,6 +180,11 @@ async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkil
             const diff = Number(mb[i]) - Number(ma[i]);
             if (diff !== 0) return diff;
           }
+          // Equal numeric parts: prefer stable over pre-release (e.g. 5.0.7 > 5.0.7-beta.1)
+          const aStable = a.length === ma[0].length;
+          const bStable = b.length === mb[0].length;
+          if (aStable && !bStable) return -1;
+          if (!aStable && bStable) return 1;
           return 0;
         }
         if (ma) return -1;
