@@ -4,7 +4,7 @@ import { readdir, rm, lstat } from 'fs/promises';
 import { join } from 'path';
 import { agents, detectInstalledAgents } from './agents.ts';
 import { track } from './telemetry.ts';
-import { removeSkillFromLock, getSkillFromLock } from './skill-lock.ts';
+import { removeSkillFromLock, getSkillFromLock, addToRemoved } from './skill-lock.ts';
 import type { AgentType } from './types.ts';
 import {
   getInstallPath,
@@ -45,12 +45,11 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
   };
 
   if (isGlobal) {
+    // Only scan the canonical dir — never scan agent-specific globalSkillsDirs.
+    // Agent-specific dirs may contain stow-managed or tool-native skills
+    // that were NOT installed by this CLI. Scanning them causes destructive
+    // collateral damage (see: npx skills remove --all -g -y incident).
     await scanDir(getCanonicalSkillsDir(true, cwd));
-    for (const agent of Object.values(agents)) {
-      if (agent.globalSkillsDir !== undefined) {
-        await scanDir(agent.globalSkillsDir);
-      }
-    }
   } else {
     await scanDir(getCanonicalSkillsDir(false, cwd));
     for (const agent of Object.values(agents)) {
@@ -157,34 +156,54 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         const agent = agents[agentKey];
         const skillPath = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
 
-        // Determine potential paths to cleanup. For universal agents, getInstallPath
-        // now returns the canonical path, so we also need to check their 'native'
-        // directory to clean up any legacy symlinks.
-        const pathsToCleanup = new Set([skillPath]);
-        const sanitizedName = sanitizeName(skillName);
-        if (isGlobal && agent.globalSkillsDir) {
-          pathsToCleanup.add(join(agent.globalSkillsDir, sanitizedName));
-        } else {
+        // For global removes, only clean up agent-specific symlinks — never
+        // follow stow symlinks into agent globalSkillsDirs (e.g. ~/.claude/skills
+        // is a stow symlink to dotfiles; rm -rf through it destroys real files).
+        if (!isGlobal) {
+          const pathsToCleanup = new Set([skillPath]);
+          const sanitizedName = sanitizeName(skillName);
           pathsToCleanup.add(join(cwd, agent.skillsDir, sanitizedName));
-        }
 
-        for (const pathToCleanup of pathsToCleanup) {
-          // Skip if this is the canonical path - we'll handle that after checking all agents
-          if (pathToCleanup === canonicalPath) {
-            continue;
-          }
-
-          try {
-            const stats = await lstat(pathToCleanup).catch(() => null);
-            if (stats) {
-              await rm(pathToCleanup, { recursive: true, force: true });
+          for (const pathToCleanup of pathsToCleanup) {
+            if (pathToCleanup === canonicalPath) {
+              continue;
             }
-          } catch (err) {
-            p.log.warn(
-              `Could not remove skill from ${agent.displayName}: ${
-                err instanceof Error ? err.message : String(err)
-              }`
-            );
+
+            try {
+              const stats = await lstat(pathToCleanup).catch(() => null);
+              if (stats) {
+                await rm(pathToCleanup, { recursive: true, force: true });
+              }
+            } catch (err) {
+              p.log.warn(
+                `Could not remove skill from ${agent.displayName}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`
+              );
+            }
+          }
+        } else {
+          // Global: only remove symlinks from agent globalSkillsDirs, not real content.
+          // Agent-specific dirs may contain stow-managed or tool-native skills that
+          // were NOT installed by this CLI.
+          const sanitizedName = sanitizeName(skillName);
+          if (agent.globalSkillsDir) {
+            const agentSkillPath = join(agent.globalSkillsDir, sanitizedName);
+            if (agentSkillPath !== canonicalPath) {
+              try {
+                const stats = await lstat(agentSkillPath).catch(() => null);
+                // Only remove symlinks, never real directories in agent-specific dirs.
+                if (stats?.isSymbolicLink()) {
+                  await rm(agentSkillPath, { force: true });
+                }
+              } catch (err) {
+                p.log.warn(
+                  `Could not remove symlink from ${agent.displayName}: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`
+                );
+              }
+            }
           }
         }
       }
@@ -214,6 +233,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
       if (isGlobal) {
         await removeSkillFromLock(skillName);
+        await addToRemoved(skillName, effectiveSource);
       }
 
       results.push({

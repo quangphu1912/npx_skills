@@ -34,6 +34,8 @@ export interface SkillLockEntry {
   updatedAt: string;
   /** Name of the plugin this skill belongs to (if any) */
   pluginName?: string;
+  /** Version of the plugin at extraction time (for staleness detection) */
+  pluginVersion?: string;
 }
 
 /**
@@ -56,6 +58,8 @@ export interface SkillLockFile {
   dismissed?: DismissedPrompts;
   /** Last selected agents for installation */
   lastSelectedAgents?: string[];
+  /** Skills explicitly removed by user — managed-sync should not re-import them */
+  removed?: Record<string, string>;
 }
 
 /**
@@ -299,4 +303,24 @@ export async function saveSelectedAgents(agents: string[]): Promise<void> {
   const lock = await readSkillLock();
   lock.lastSelectedAgents = agents;
   await writeSkillLock(lock);
+}
+
+export async function addToRemoved(skillName: string, source: string): Promise<void> {
+  const lock = await readSkillLock();
+  if (!lock.removed) lock.removed = {};
+  lock.removed[skillName] = source;
+  await writeSkillLock(lock);
+}
+
+export async function getRemovedSkills(): Promise<Set<string>> {
+  const lock = await readSkillLock();
+  return new Set(Object.keys(lock.removed ?? {}));
+}
+
+export async function removeFromRemoved(skillName: string): Promise<void> {
+  const lock = await readSkillLock();
+  if (lock.removed) {
+    delete lock.removed[skillName];
+    await writeSkillLock(lock);
+  }
 }

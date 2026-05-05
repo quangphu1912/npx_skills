@@ -13,6 +13,10 @@ import { runList } from './list.ts';
 import { removeCommand, parseRemoveOptions } from './remove.ts';
 import { sanitizeMetadata } from './sanitize.ts';
 import { runSync, parseSyncOptions } from './sync.ts';
+import { runImport, parseImportOptions } from './import-skills.ts';
+import { runDistribute, parseDistributeOptions } from './distribute.ts';
+import { runSyncManaged, parseSyncManagedOptions } from './sync-managed.ts';
+import { runExtractPlugins, parseExtractPluginsOptions } from './extract-plugins.ts';
 import { track, flushTelemetry } from './telemetry.ts';
 import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.ts';
 import { readLocalLock, type LocalSkillLockEntry } from './local-lock.ts';
@@ -101,6 +105,19 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx skills experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
   );
   console.log();
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills import${RESET}              ${DIM}Import local skills to master store${RESET}`
+  );
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills distribute${RESET}           ${DIM}Distribute skills to all agents${RESET}`
+  );
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills managed-sync${RESET}         ${DIM}Import + distribute in one step${RESET}`
+  );
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills extract-plugins${RESET}     ${DIM}Extract Claude plugin skills to master${RESET}`
+  );
+  console.log();
   console.log(`${DIM}try:${RESET} npx skills add vercel-labs/agent-skills`);
   console.log();
   console.log(`Discover more skills at ${TEXT}https://skills.sh/${RESET}`);
@@ -131,6 +148,23 @@ ${BOLD}Project:${RESET}
   experimental_install Restore skills from skills-lock.json
   init [name]          Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)
   experimental_sync    Sync skills from node_modules into agent directories
+
+${BOLD}Skill Distribution:${RESET}
+  import <path>        Import local skill(s) to master store (symlink by default)
+  distribute           Distribute master skills to all agents via symlinks
+  managed-sync         Import from watched dirs + distribute in one step
+  extract-plugins      Extract Claude plugin skills to master store
+
+${BOLD}Import Options:${RESET}
+  -g, --global           Import to global master store
+  --copy                 Copy files instead of symlinking
+  --name <name>          Override skill name
+  -y, --yes              Skip confirmation prompts
+
+${BOLD}Distribute Options:${RESET}
+  -g, --global           Distribute global skills
+  -a, --agent <agents>   Target specific agents
+  -y, --yes              Skip confirmation prompts
 
 ${BOLD}Add Options:${RESET}
   -g, --global           Install skill globally (user-level) instead of project-level
@@ -940,6 +974,34 @@ async function main(): Promise<void> {
     case 'ls':
       await runList(restArgs);
       break;
+    case 'import': {
+      showLogo();
+      console.log();
+      const { paths: importPaths, options: importOpts } = parseImportOptions(restArgs);
+      await runImport(importPaths, importOpts);
+      break;
+    }
+    case 'distribute': {
+      showLogo();
+      console.log();
+      const { options: distributeOpts } = parseDistributeOptions(restArgs);
+      await runDistribute(distributeOpts);
+      break;
+    }
+    case 'managed-sync': {
+      showLogo();
+      console.log();
+      const { options: syncManagedOpts } = parseSyncManagedOptions(restArgs);
+      await runSyncManaged(syncManagedOpts);
+      break;
+    }
+    case 'extract-plugins': {
+      showLogo();
+      console.log();
+      const { options: extractPluginsOpts } = parseExtractPluginsOptions(restArgs);
+      await runExtractPlugins(extractPluginsOpts);
+      break;
+    }
     case 'check':
     case 'update':
     case 'upgrade':
