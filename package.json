@@ -4,8 +4,7 @@
   "description": "Migrate and sync your AI agent skills across Claude Code, Cursor, Codex, and 50 more tools",
   "type": "module",
   "bin": {
-    "skills": "./bin/cli.mjs",
-    "add-skill": "./bin/cli.mjs"
+    "skills": "./bin/cli.mjs"
   },
   "files": [
     "dist",
