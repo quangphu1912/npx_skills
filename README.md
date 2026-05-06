@@ -1,6 +1,18 @@
-# skills
+# @phule/skills
 
-The CLI for the open agent skills ecosystem.
+Moving from Claude Code to Cursor? Trying Codex? Don't leave your skills behind.
+
+`@phule/skills` lets you import all your Claude Code plugin skills and distribute
+them to every AI agent you use — in three commands.
+
+```bash
+npx @phule/skills extract-claude-plugins -y   # pull from Claude Code
+npx @phule/skills distribute -g -y            # push to every other agent
+npx @phule/skills list -g                      # verify
+```
+
+[![npm version](https://img.shields.io/npm/v/@phule/skills)](https://npmjs.com/package/@phule/skills)
+[![npm downloads](https://img.shields.io/npm/dw/@phule/skills)](https://npmjs.com/package/@phule/skills)
 
 <!-- agent-list:start -->
 Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [50 more](#supported-agents).
