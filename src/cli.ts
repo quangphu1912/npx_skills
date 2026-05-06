@@ -232,6 +232,12 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills init my-skill
   ${DIM}$${RESET} skills experimental_sync              ${DIM}# sync from node_modules${RESET}
   ${DIM}$${RESET} skills experimental_sync -y           ${DIM}# sync without prompts${RESET}
+  ${DIM}$${RESET} skills import ./my-skill -g           ${DIM}# import local skill to master store${RESET}
+  ${DIM}$${RESET} skills distribute -g -y               ${DIM}# fan out to all agents${RESET}
+  ${DIM}$${RESET} skills agents                         ${DIM}# list supported agents${RESET}
+  ${DIM}$${RESET} skills managed-sync -g -y             ${DIM}# import + distribute in one step${RESET}
+  ${DIM}$${RESET} skills extract-plugins -g -y          ${DIM}# extract plugin skills${RESET}
+  ${DIM}$${RESET} skills distribute --dry-run -g -y     ${DIM}# preview without changes${RESET}
 
 Discover more skills at ${TEXT}https://skills.sh/${RESET}
 `);
