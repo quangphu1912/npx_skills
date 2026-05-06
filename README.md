@@ -1,15 +1,15 @@
-# @phule/skills
+# @phu_le/skills
 
 > Fork of [vercel-labs/skills](https://github.com/vercel-labs/skills) with multi-agent sync, managed workflows, and plugin extraction.
 
 Moving from Claude Code to Cursor? Trying Codex? Don't leave your skills behind.
 
-`@phule/skills` lets you install skills from GitHub, import your Claude Code plugin skills, and distribute them to every AI agent you use.
+`@phu_le/skills` lets you install skills from GitHub, import your Claude Code plugin skills, and distribute them to every AI agent you use.
 
 **No dotfiles or special setup required** — works out of the box with any of the 50+ supported agents.
 
-[![npm version](https://img.shields.io/npm/v/@phule/skills)](https://npmjs.com/package/@phule/skills)
-[![npm downloads](https://img.shields.io/npm/dw/@phule/skills)](https://npmjs.com/package/@phule/skills)
+[![npm version](https://img.shields.io/npm/v/@phu_le/skills)](https://npmjs.com/package/@phu_le/skills)
+[![npm downloads](https://img.shields.io/npm/dw/@phu_le/skills)](https://npmjs.com/package/@phu_le/skills)
 
 <!-- agent-list:start -->
 Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [50 more](#supported-agents).
@@ -19,13 +19,13 @@ Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [50 more](#su
 
 ```bash
 # Install a skill from GitHub
-npx @phule/skills add vercel-labs/agent-skills -g
+npx @phu_le/skills add vercel-labs/agent-skills -g
 
 # See what's installed
-npx @phule/skills list -g
+npx @phu_le/skills list -g
 
 # Keep skills up to date
-npx @phule/skills update
+npx @phu_le/skills update
 ```
 
 That's it. No dotfiles, no config files, no setup. Just works.

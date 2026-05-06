@@ -1,4 +1,4 @@
-# Contributing to @phule/skills
+# Contributing to @phu_le/skills
 
 Thanks for your interest! Here's how to get started.
 
