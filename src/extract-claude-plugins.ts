@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readdir, stat, cp, rm, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { getCanonicalSkillsDir } from './installer.ts';
@@ -36,13 +36,19 @@ export async function runExtractClaudePlugins(options: ExtractClaudePluginsOptio
   const pluginsCacheDir = join(homedir(), '.claude', 'plugins', 'cache');
   const lockedSkills = await getAllLockedSkills();
 
+  const enabledPlugins = readEnabledPlugins();
+  if (enabledPlugins) {
+    const names = [...enabledPlugins].join(', ');
+    p.log.info(pc.dim(`Filtering to enabled plugins: ${names}`));
+  }
+
   if (!existsSync(pluginsCacheDir)) {
     p.log.error(pc.red('Plugin cache not found at ~/.claude/plugins/cache/'));
     p.outro(pc.yellow('No plugins to extract.'));
     return;
   }
 
-  const allPluginSkills = await discoverPluginSkills(pluginsCacheDir);
+  const allPluginSkills = await discoverPluginSkills(pluginsCacheDir, enabledPlugins);
 
   if (allPluginSkills.length === 0) {
     p.log.info(pc.dim('No plugin skills found to extract.'));
@@ -168,7 +174,25 @@ export async function runExtractClaudePlugins(options: ExtractClaudePluginsOptio
   p.outro(pc.green(dryRun ? 'Dry run complete — no changes made.' : 'Done!'));
 }
 
-async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkill[]> {
+function readEnabledPlugins(): Set<string> | null {
+  const settingsPath = join(homedir(), '.claude', 'settings.json');
+  if (!existsSync(settingsPath)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+    const enabled: Record<string, boolean> = raw.enabledPlugins ?? {};
+    const names = Object.entries(enabled)
+      .filter(([, v]) => v === true)
+      .map(([k]) => k.split('@')[0]);
+    return names.length > 0 ? new Set(names) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function discoverPluginSkills(
+  pluginsCacheDir: string,
+  enabledPlugins: Set<string> | null
+): Promise<PluginSkill[]> {
   const skills: PluginSkill[] = [];
 
   const marketplaces = await readdirSafe(pluginsCacheDir);
@@ -178,6 +202,7 @@ async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkil
 
     const plugins = await readdirSafe(marketplaceDir);
     for (const pluginName of plugins) {
+      if (enabledPlugins && !enabledPlugins.has(pluginName)) continue;
       const pluginDir = join(marketplaceDir, pluginName);
       if (!(await isDir(pluginDir))) continue;
 
