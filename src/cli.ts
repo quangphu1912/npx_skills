@@ -935,7 +935,7 @@ async function main(): Promise<void> {
     }
     case 'remove':
     case 'rm':
-    case 'r':
+    case 'r': {
       // Check for --help or -h flag
       if (restArgs.includes('--help') || restArgs.includes('-h')) {
         showRemoveHelp();
@@ -944,6 +944,7 @@ async function main(): Promise<void> {
       const { skills, options: removeOptions } = parseRemoveOptions(restArgs);
       await removeCommand(skills, removeOptions);
       break;
+    }
     case 'experimental_sync': {
       showLogo();
       const { options: syncOptions } = parseSyncOptions(restArgs);
@@ -1008,4 +1009,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().finally(() => flushTelemetry().then(() => process.exit(process.exitCode ?? 0)));
+main()
+  .catch((err: unknown) => {
+    console.error('\x1b[31m' + (err instanceof Error ? err.message : String(err)) + '\x1b[0m');
+    process.exitCode = 1;
+  })
+  .finally(() => flushTelemetry().then(() => process.exit(process.exitCode ?? 0)));

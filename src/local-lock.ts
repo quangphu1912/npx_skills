@@ -73,6 +73,18 @@ export async function readLocalLock(cwd?: string): Promise<LocalSkillLockFile> {
     }
 
     if (parsed.version < CURRENT_VERSION) {
+      const backupPath = `${lockPath}.v${parsed.version}.bak`;
+      try {
+        await writeFile(backupPath, content, 'utf-8');
+      } catch (backupErr) {
+        console.warn(
+          `⚠ Local skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backup failed (${backupErr instanceof Error ? backupErr.message : String(backupErr)}). Run 'npx skills update' to repopulate.`
+        );
+        return createEmptyLocalLock();
+      }
+      console.warn(
+        `⚠ Local skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backed up to ${backupPath}. Run 'npx skills update' to repopulate.`
+      );
       return createEmptyLocalLock();
     }
 

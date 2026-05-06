@@ -80,6 +80,18 @@ export async function readSkillLock(): Promise<SkillLockFile> {
     }
 
     if (parsed.version < CURRENT_VERSION) {
+      const backupPath = `${lockPath}.v${parsed.version}.bak`;
+      try {
+        await writeFile(backupPath, content, 'utf-8');
+      } catch (backupErr) {
+        console.warn(
+          `⚠ Skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backup failed (${backupErr instanceof Error ? backupErr.message : String(backupErr)}). Run 'npx skills update' to repopulate.`
+        );
+        return createEmptyLockFile();
+      }
+      console.warn(
+        `⚠ Skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backed up to ${backupPath}. Run 'npx skills update' to repopulate.`
+      );
       return createEmptyLockFile();
     }
 
