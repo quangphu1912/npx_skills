@@ -22,7 +22,12 @@ import {
 } from './extract-claude-plugins.ts';
 import { runListAgents } from './list-agents.ts';
 import { track, flushTelemetry } from './telemetry.ts';
-import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.ts';
+import {
+  fetchSkillFolderHash,
+  getGitHubToken,
+  readSkillLock,
+  type SkillLockEntry,
+} from './skill-lock.ts';
 import { readLocalLock, type LocalSkillLockEntry } from './local-lock.ts';
 import {
   buildUpdateInstallSource,
@@ -343,54 +348,6 @@ Describe when this skill should be used.
 // Check and Update Commands
 // ============================================
 
-const AGENTS_DIR = '.agents';
-const LOCK_FILE = '.skill-lock.json';
-const CURRENT_LOCK_VERSION = 3; // Bumped from 2 to 3 for folder hash support
-
-interface SkillLockEntry {
-  source: string;
-  sourceType: string;
-  sourceUrl: string;
-  ref?: string;
-  skillPath?: string;
-  /** GitHub tree SHA for the entire skill folder (v3) */
-  skillFolderHash: string;
-  installedAt: string;
-  updatedAt: string;
-}
-
-interface SkillLockFile {
-  version: number;
-  skills: Record<string, SkillLockEntry>;
-}
-
-function getSkillLockPath(): string {
-  const xdgStateHome = process.env.XDG_STATE_HOME;
-  if (xdgStateHome) {
-    return join(xdgStateHome, 'skills', LOCK_FILE);
-  }
-  return join(homedir(), AGENTS_DIR, LOCK_FILE);
-}
-
-function readSkillLock(): SkillLockFile {
-  const lockPath = getSkillLockPath();
-  try {
-    const content = readFileSync(lockPath, 'utf-8');
-    const parsed = JSON.parse(content) as SkillLockFile;
-    if (typeof parsed.version !== 'number' || !parsed.skills) {
-      return { version: CURRENT_LOCK_VERSION, skills: {} };
-    }
-    // If old version, wipe and start fresh (backwards incompatible change)
-    // v3 adds skillFolderHash - we want fresh installs to populate it
-    if (parsed.version < CURRENT_LOCK_VERSION) {
-      return { version: CURRENT_LOCK_VERSION, skills: {} };
-    }
-    return parsed;
-  } catch {
-    return { version: CURRENT_LOCK_VERSION, skills: {} };
-  }
-}
-
 // ============================================
 // Scope Detection and Prompt
 // ============================================
@@ -649,7 +606,7 @@ async function getProjectSkillsForUpdate(
 async function updateGlobalSkills(
   skillFilter?: string[]
 ): Promise<{ successCount: number; failCount: number; checkedCount: number }> {
-  const lock = readSkillLock();
+  const lock = await readSkillLock();
   const skillNames = Object.keys(lock.skills);
   let successCount = 0;
   let failCount = 0;

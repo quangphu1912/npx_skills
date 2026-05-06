@@ -65,12 +65,26 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
 
   p.log.info(`Found ${pc.cyan(String(skillNames.length))} skill(s) to distribute`);
 
+  if (dryRun) {
+    for (const name of skillNames) {
+      p.log.info(pc.dim(`  · ${name}`));
+    }
+  }
+
   // Determine target agents
   let targetAgents: AgentType[];
   if (options.agent?.includes('*')) {
     // Explicit '*' targets all non-universal agents regardless of install status
     targetAgents = getNonUniversalAgents();
   } else if (options.agent && options.agent.length > 0) {
+    const validAgents = Object.keys(agents);
+    const invalidAgents = options.agent.filter((a) => !validAgents.includes(a));
+    if (invalidAgents.length > 0) {
+      p.log.error(`Invalid agents: ${invalidAgents.join(', ')}`);
+      p.log.info(`Valid agents: ${validAgents.join(', ')}`);
+      process.exitCode = 1;
+      return;
+    }
     targetAgents = options.agent as AgentType[];
   } else {
     // Default: only target installed non-universal agents
@@ -175,6 +189,7 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
   }
   if (updated.length > 0) {
     p.log.info(`${updatePrefix} ${updated.length} symlink(s)`);
+    for (const r of updated) p.log.message(`  ${pc.cyan('↻')} ${r.skill} → ${r.agent}`);
   }
   if (skipped.length > 0) {
     p.log.info(pc.dim(`${skipped.length} symlink(s) already valid or skipped`));

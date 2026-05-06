@@ -58,12 +58,27 @@ export async function runExtractClaudePlugins(options: ExtractClaudePluginsOptio
 
   p.log.info(`Found ${pc.cyan(String(allPluginSkills.length))} plugin skill(s) to extract`);
 
+  // Show per-plugin details (version selected, skills extracted)
+  const byPlugin = new Map<string, { version: string; skills: string[] }>();
+  for (const ps of allPluginSkills) {
+    const key = `${ps.marketplace}/${ps.pluginName}`;
+    const entry = byPlugin.get(key) ?? { version: ps.version, skills: [] };
+    entry.skills.push(ps.skillName);
+    byPlugin.set(key, entry);
+  }
+  for (const [plugin, info] of byPlugin) {
+    p.log.info(pc.dim(`  ${plugin}@${info.version}: ${info.skills.join(', ')}`));
+  }
+
   if (!dryRun) {
     await mkdir(canonicalDir, { recursive: true });
   }
 
-  const results: Array<{ name: string; action: 'copied' | 'updated' | 'skipped'; error?: string }> =
-    [];
+  const results: Array<{
+    name: string;
+    action: 'copied' | 'updated' | 'skipped' | 'failed';
+    error?: string;
+  }> = [];
   const extractedNames = new Set<string>();
 
   for (const ps of allPluginSkills) {
@@ -102,7 +117,7 @@ export async function runExtractClaudePlugins(options: ExtractClaudePluginsOptio
     } catch (err) {
       results.push({
         name: targetName,
-        action: 'copied',
+        action: 'failed',
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -151,15 +166,23 @@ export async function runExtractClaudePlugins(options: ExtractClaudePluginsOptio
   const prefix = dryRun ? pc.yellow('[dry-run] Would copy') : pc.green('Copied');
 
   console.log();
-  if (copied.length > 0) p.log.success(`${prefix} ${copied.length} new skill(s)`);
+  if (copied.length > 0) {
+    p.log.success(`${prefix} ${copied.length} new skill(s)`);
+    for (const r of copied) p.log.message(`  ${pc.green('✓')} ${r.name}`);
+  }
   if (updated.length > 0) {
     const updatePrefix = dryRun ? pc.yellow('[dry-run] Would update') : pc.cyan('Updated');
     p.log.info(`${updatePrefix} ${updated.length} skill(s)`);
+    for (const r of updated) p.log.message(`  ${pc.cyan('↻')} ${r.name}`);
   }
-  if (skipped.length > 0) p.log.info(pc.dim(`Skipped ${skipped.length} unchanged skill(s)`));
+  if (skipped.length > 0) {
+    p.log.info(pc.dim(`Skipped ${skipped.length} unchanged skill(s)`));
+    for (const r of skipped) p.log.message(`  ${pc.dim('·')} ${r.name}`);
+  }
   if (staleExtractions.length > 0) {
     const stalePrefix = dryRun ? '[dry-run] Would clean' : 'Cleaned';
     p.log.info(pc.yellow(`${stalePrefix} ${staleExtractions.length} stale extraction(s)`));
+    for (const name of staleExtractions) p.log.message(`  ${pc.yellow('✗')} ${name}`);
   }
   if (failed.length > 0) {
     p.log.error(pc.red(`Failed ${failed.length} skill(s)`));
