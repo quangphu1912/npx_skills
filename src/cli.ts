@@ -155,11 +155,22 @@ ${BOLD}Skill Distribution:${RESET}
   managed-sync         Import from watched dirs + distribute in one step
   extract-plugins      Extract Claude plugin skills to master store
 
+${BOLD}Managed Sync Options:${RESET}
+  -g, --global           Sync global skills
+  -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
+
+${BOLD}Extract Plugins Options:${RESET}
+  -g, --global           Extract to global master store
+  -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
+
 ${BOLD}Import Options:${RESET}
   -g, --global           Import to global master store
   --copy                 Copy files instead of symlinking
   --name <name>          Override skill name
   -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
 
 ${BOLD}Distribute Options:${RESET}
   -g, --global           Distribute global skills
@@ -183,6 +194,7 @@ ${BOLD}Remove Options:${RESET}
   -s, --skill <skills>   Specify skills to remove (use '*' for all skills)
   -y, --yes              Skip confirmation prompts
   --all                  Shorthand for --skill '*' --agent '*' -y
+  --dry-run              Print what would change without making any filesystem changes
   
 ${BOLD}Experimental Sync Options:${RESET}
   -a, --agent <agents>   Specify agents to install to (use '*' for all agents)

@@ -13,13 +13,19 @@ import { track } from './telemetry.ts';
 export interface SyncManagedOptions {
   global?: boolean;
   yes?: boolean;
+  dryRun?: boolean;
 }
 
 export async function runSyncManaged(options: SyncManagedOptions): Promise<void> {
   const isGlobal = options.global ?? true;
   const cwd = process.cwd();
+  const dryRun = options.dryRun ?? false;
 
   p.intro(pc.bgCyan(pc.black(' skills sync ')));
+
+  if (dryRun) {
+    p.log.warn(pc.yellow('[dry-run] No filesystem changes will be made'));
+  }
 
   const config = readStowConfig();
 
@@ -46,14 +52,12 @@ export async function runSyncManaged(options: SyncManagedOptions): Promise<void>
         const skillName = entry.name;
         const skillMdPath = join(watchedDir, skillName, 'SKILL.md');
 
-        // Check if it has SKILL.md
         try {
           await stat(skillMdPath);
         } catch {
           continue;
         }
 
-        // Sanitize to match lock file keys (lock keys use sanitizeName, dir names may not)
         const sanitized = sanitizeName(skillName);
         if (!lockedNames.has(sanitized) && !removedNames.has(sanitized)) {
           newSkills.push(join(watchedDir, skillName));
@@ -62,7 +66,7 @@ export async function runSyncManaged(options: SyncManagedOptions): Promise<void>
 
       if (newSkills.length > 0) {
         p.log.info(`Found ${pc.cyan(String(newSkills.length))} new skill(s) in ${watchedDir}`);
-        await runImport(newSkills, { global: isGlobal, yes: options.yes, quiet: true });
+        await runImport(newSkills, { global: isGlobal, yes: options.yes, quiet: true, dryRun });
       } else {
         p.log.info(pc.dim(`No new skills in ${watchedDir}`));
       }
@@ -74,15 +78,17 @@ export async function runSyncManaged(options: SyncManagedOptions): Promise<void>
 
   // Step 2: Distribute to all agents
   p.log.info(pc.dim('Running distribute...'));
-  await runDistribute({ global: isGlobal, yes: options.yes, quiet: true });
+  await runDistribute({ global: isGlobal, yes: options.yes, quiet: true, dryRun });
 
-  track({
-    event: 'sync-managed',
-    watchedDirs: String(config.watchedDirs.length),
-  });
+  if (!dryRun) {
+    track({
+      event: 'sync-managed',
+      watchedDirs: String(config.watchedDirs.length),
+    });
+  }
 
   console.log();
-  p.outro(pc.green('Sync complete!'));
+  p.outro(pc.green(dryRun ? 'Dry run complete — no changes made.' : 'Sync complete!'));
 }
 
 export function parseSyncManagedOptions(args: string[]): {
@@ -95,6 +101,8 @@ export function parseSyncManagedOptions(args: string[]): {
       options.global = true;
     } else if (arg === '-y' || arg === '--yes') {
       options.yes = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
     }
   }
 

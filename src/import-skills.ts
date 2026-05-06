@@ -24,13 +24,19 @@ export interface ImportOptions {
   force?: boolean;
   name?: string;
   quiet?: boolean;
+  dryRun?: boolean;
 }
 
 export async function runImport(paths: string[], options: ImportOptions): Promise<void> {
   const isGlobal = options.global ?? true;
   const cwd = process.cwd();
+  const dryRun = options.dryRun ?? false;
 
   p.intro(pc.bgCyan(pc.black(' skills import ')));
+
+  if (dryRun) {
+    p.log.warn(pc.yellow('[dry-run] No filesystem changes will be made'));
+  }
 
   const canonicalDir = getCanonicalSkillsDir(isGlobal, cwd);
 
@@ -104,7 +110,7 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
           continue;
         }
       }
-      if (!options.yes && !options.force) {
+      if (!options.yes && !options.force && !dryRun) {
         const overwrite = await p.confirm({
           message: `${skillName} already exists. Overwrite?`,
         });
@@ -116,7 +122,9 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
     }
 
     try {
-      await mkdir(canonicalDir, { recursive: true });
+      if (!dryRun) {
+        await mkdir(canonicalDir, { recursive: true });
+      }
 
       // Guard against importing from within the canonical dir itself (self-referential symlink)
       const resolvedCanonical = await realpath(canonicalDir).catch(() => canonicalDir);
@@ -136,30 +144,39 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
 
       if (options.copy) {
         // Copy mode
-        await rm(targetDir, { recursive: true, force: true }).catch(() => {});
-        await cp(absolutePath, targetDir, { recursive: true });
-        p.log.success(`${pc.green(skillName)} copied to ${pc.dim(targetDir)}`);
+        if (!dryRun) {
+          await rm(targetDir, { recursive: true, force: true }).catch(() => {});
+          await cp(absolutePath, targetDir, { recursive: true });
+        }
+        p.log.success(
+          `${dryRun ? pc.yellow('[dry-run] Would copy') : pc.green(skillName)} ${dryRun ? skillName + ' to' : 'copied to'} ${pc.dim(targetDir)}`
+        );
       } else {
         // Symlink mode (default)
-        await rm(targetDir, { recursive: true, force: true }).catch(() => {});
-
-        const relativePath = relative(resolvedCanonical, resolvedSource);
-        const symlinkType = process.platform === 'win32' ? 'junction' : undefined;
-        await symlink(relativePath, targetDir, symlinkType);
-        p.log.success(`${pc.green(skillName)} symlinked to ${pc.dim(absolutePath)}`);
+        if (!dryRun) {
+          await rm(targetDir, { recursive: true, force: true }).catch(() => {});
+          const relativePath = relative(resolvedCanonical, resolvedSource);
+          const symlinkType = process.platform === 'win32' ? 'junction' : undefined;
+          await symlink(relativePath, targetDir, symlinkType);
+        }
+        p.log.success(
+          `${dryRun ? pc.yellow('[dry-run] Would symlink') : pc.green(skillName)} ${dryRun ? skillName + ' to' : 'symlinked to'} ${pc.dim(absolutePath)}`
+        );
       }
 
       // Update lock file
-      const homeRelative = toHomeRelative(absolutePath);
-      await addSkillToLock(skillName, {
-        source: homeRelative,
-        sourceType: 'local',
-        sourceUrl: homeRelative,
-        skillFolderHash: '',
-      });
+      if (!dryRun) {
+        const homeRelative = toHomeRelative(absolutePath);
+        await addSkillToLock(skillName, {
+          source: homeRelative,
+          sourceType: 'local',
+          sourceUrl: homeRelative,
+          skillFolderHash: '',
+        });
 
-      // Clear from removed list (user is re-importing)
-      await removeFromRemoved(skillName);
+        // Clear from removed list (user is re-importing)
+        await removeFromRemoved(skillName);
+      }
 
       results.push({ name: skillName, success: true });
     } catch (err) {
@@ -172,7 +189,13 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
   }
 
   // Stage to git if stow-managed and autoGit enabled
-  if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && results.some((r) => r.success)) {
+  if (
+    !dryRun &&
+    stowInfo.isStow &&
+    config.autoGit &&
+    stowInfo.repoPath &&
+    results.some((r) => r.success)
+  ) {
     const successfulNames = results.filter((r) => r.success).map((r) => r.name);
     const message = `feat(skills): import ${successfulNames.join(', ')}`;
     const gitResult = stageToGit(
@@ -193,7 +216,8 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
 
   console.log();
   if (successful.length > 0) {
-    p.log.success(pc.green(`Imported ${successful.length} skill(s)`));
+    const prefix = dryRun ? pc.yellow(`[dry-run] Would import`) : pc.green(`Imported`);
+    p.log.success(`${prefix} ${successful.length} skill(s)`);
   }
   if (failed.length > 0) {
     p.log.error(pc.red(`Failed to import ${failed.length} skill(s)`));
@@ -202,15 +226,17 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
     }
   }
 
-  track({
-    event: 'import',
-    skillCount: String(successful.length),
-    mode: options.copy ? 'copy' : 'symlink',
-  });
+  if (!dryRun) {
+    track({
+      event: 'import',
+      skillCount: String(successful.length),
+      mode: options.copy ? 'copy' : 'symlink',
+    });
+  }
 
   if (!options.quiet) {
     console.log();
-    p.outro(pc.green('Done!'));
+    p.outro(pc.green(dryRun ? 'Dry run complete — no changes made.' : 'Done!'));
   }
 }
 
@@ -231,6 +257,8 @@ export function parseImportOptions(args: string[]): {
       options.copy = true;
     } else if (arg === '--force') {
       options.force = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
     } else if (arg === '--name') {
       i++;
       options.name = args[i];

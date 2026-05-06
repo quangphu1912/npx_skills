@@ -12,6 +12,7 @@ import { track } from './telemetry.ts';
 export interface ExtractPluginsOptions {
   global?: boolean;
   yes?: boolean;
+  dryRun?: boolean;
 }
 
 interface PluginSkill {
@@ -25,8 +26,13 @@ interface PluginSkill {
 export async function runExtractPlugins(options: ExtractPluginsOptions): Promise<void> {
   const isGlobal = options.global ?? true;
   const cwd = process.cwd();
+  const dryRun = options.dryRun ?? false;
 
   p.intro(pc.bgCyan(pc.black(' skills extract-plugins ')));
+
+  if (dryRun) {
+    p.log.warn(pc.yellow('[dry-run] No filesystem changes will be made'));
+  }
 
   const canonicalDir = getCanonicalSkillsDir(isGlobal, cwd);
   const pluginsCacheDir = join(homedir(), '.claude', 'plugins', 'cache');
@@ -48,7 +54,9 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
 
   p.log.info(`Found ${pc.cyan(String(allPluginSkills.length))} plugin skill(s) to extract`);
 
-  await mkdir(canonicalDir, { recursive: true });
+  if (!dryRun) {
+    await mkdir(canonicalDir, { recursive: true });
+  }
 
   const results: Array<{ name: string; action: 'copied' | 'updated' | 'skipped'; error?: string }> =
     [];
@@ -58,7 +66,6 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
     const targetName = `${ps.pluginName}-${ps.skillName}`;
     const targetDir = join(canonicalDir, targetName);
 
-    // Skip if already extracted with same version
     const existing = lockedSkills[targetName];
     if (
       existing &&
@@ -66,28 +73,26 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
       existing.pluginName === ps.pluginName &&
       existing.pluginVersion === ps.version
     ) {
-      extractedNames.add(targetName); // valid — keep in extractedNames so stale cleanup skips it
+      extractedNames.add(targetName);
       results.push({ name: targetName, action: 'skipped' });
       continue;
     }
 
     try {
-      // Remove old extraction if exists — surface errors so cp failure is attributable
-      await rm(targetDir, { recursive: true, force: true });
-      // dereference:true copies symlinks as real files so extractions don't dangle
-      // when the plugin version directory is garbage-collected
-      await cp(ps.skillPath, targetDir, { recursive: true, dereference: true });
+      if (!dryRun) {
+        await rm(targetDir, { recursive: true, force: true });
+        await cp(ps.skillPath, targetDir, { recursive: true, dereference: true });
+        await addSkillToLock(targetName, {
+          source: `plugin:${ps.marketplace}/${ps.pluginName}`,
+          sourceType: 'plugin',
+          sourceUrl: `plugin:${ps.marketplace}/${ps.pluginName}`,
+          skillFolderHash: '',
+          pluginName: ps.pluginName,
+          pluginVersion: ps.version,
+        });
+      }
 
-      await addSkillToLock(targetName, {
-        source: `plugin:${ps.marketplace}/${ps.pluginName}`,
-        sourceType: 'plugin',
-        sourceUrl: `plugin:${ps.marketplace}/${ps.pluginName}`,
-        skillFolderHash: '',
-        pluginName: ps.pluginName,
-        pluginVersion: ps.version,
-      });
-
-      extractedNames.add(targetName); // only after successful extraction
+      extractedNames.add(targetName);
       const action = existing ? 'updated' : 'copied';
       results.push({ name: targetName, action });
     } catch (err) {
@@ -103,31 +108,34 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
   const staleExtractions: string[] = [];
   for (const [name, entry] of Object.entries(lockedSkills)) {
     if (entry.sourceType === 'plugin' && !extractedNames.has(name)) {
-      const targetDir = join(canonicalDir, name);
-      await rm(targetDir, { recursive: true, force: true }).catch(() => {});
-      // Always remove from lock even if the directory was already gone
-      await removeSkillFromLock(name);
+      if (!dryRun) {
+        const targetDir = join(canonicalDir, name);
+        await rm(targetDir, { recursive: true, force: true }).catch(() => {});
+        await removeSkillFromLock(name);
+      }
       staleExtractions.push(name);
     }
   }
 
   // Stage to git if stow-managed
-  const stowInfo = await detectStow(canonicalDir);
-  const config = readStowConfig();
-  if (
-    stowInfo.isStow &&
-    config.autoGit &&
-    stowInfo.repoPath &&
-    results.some((r) => r.action !== 'skipped')
-  ) {
-    const changed = results.filter((r) => r.action !== 'skipped').map((r) => r.name);
-    const gitResult = stageToGit(
-      stowInfo.repoPath,
-      changed.map((n) => join(canonicalDir, n)),
-      `feat(skills): extract ${changed.length} plugin skill(s)`
-    );
-    if (!gitResult.ok) {
-      p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
+  if (!dryRun) {
+    const stowInfo = await detectStow(canonicalDir);
+    const config = readStowConfig();
+    if (
+      stowInfo.isStow &&
+      config.autoGit &&
+      stowInfo.repoPath &&
+      results.some((r) => r.action !== 'skipped')
+    ) {
+      const changed = results.filter((r) => r.action !== 'skipped').map((r) => r.name);
+      const gitResult = stageToGit(
+        stowInfo.repoPath,
+        changed.map((n) => join(canonicalDir, n)),
+        `feat(skills): extract ${changed.length} plugin skill(s)`
+      );
+      if (!gitResult.ok) {
+        p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
+      }
     }
   }
 
@@ -136,22 +144,30 @@ export async function runExtractPlugins(options: ExtractPluginsOptions): Promise
   const updated = results.filter((r) => r.action === 'updated');
   const skipped = results.filter((r) => r.action === 'skipped');
   const failed = results.filter((r) => r.error);
+  const prefix = dryRun ? pc.yellow('[dry-run] Would copy') : pc.green('Copied');
 
   console.log();
-  if (copied.length > 0) p.log.success(pc.green(`Copied ${copied.length} new skill(s)`));
-  if (updated.length > 0) p.log.info(pc.cyan(`Updated ${updated.length} skill(s)`));
+  if (copied.length > 0) p.log.success(`${prefix} ${copied.length} new skill(s)`);
+  if (updated.length > 0) {
+    const updatePrefix = dryRun ? pc.yellow('[dry-run] Would update') : pc.cyan('Updated');
+    p.log.info(`${updatePrefix} ${updated.length} skill(s)`);
+  }
   if (skipped.length > 0) p.log.info(pc.dim(`Skipped ${skipped.length} unchanged skill(s)`));
-  if (staleExtractions.length > 0)
-    p.log.info(pc.yellow(`Cleaned ${staleExtractions.length} stale extraction(s)`));
+  if (staleExtractions.length > 0) {
+    const stalePrefix = dryRun ? '[dry-run] Would clean' : 'Cleaned';
+    p.log.info(pc.yellow(`${stalePrefix} ${staleExtractions.length} stale extraction(s)`));
+  }
   if (failed.length > 0) {
     p.log.error(pc.red(`Failed ${failed.length} skill(s)`));
     for (const r of failed) p.log.message(`  ${pc.red('✗')} ${r.name}: ${r.error}`);
   }
 
-  track({ event: 'extract-plugins', skillCount: String(copied.length + updated.length) });
+  if (!dryRun) {
+    track({ event: 'extract-plugins', skillCount: String(copied.length + updated.length) });
+  }
 
   console.log();
-  p.outro(pc.green('Done!'));
+  p.outro(pc.green(dryRun ? 'Dry run complete — no changes made.' : 'Done!'));
 }
 
 async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkill[]> {
@@ -167,7 +183,6 @@ async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkil
       const pluginDir = join(marketplaceDir, pluginName);
       if (!(await isDir(pluginDir))) continue;
 
-      // Pick latest version: semver sort for vX.Y.Z dirs, mtime fallback for others
       const versions = await readdirSafe(pluginDir);
       if (versions.length === 0) continue;
 
@@ -180,7 +195,6 @@ async function discoverPluginSkills(pluginsCacheDir: string): Promise<PluginSkil
             const diff = Number(mb[i]) - Number(ma[i]);
             if (diff !== 0) return diff;
           }
-          // Equal numeric parts: prefer stable over pre-release (e.g. 5.0.7 > 5.0.7-beta.1)
           const aStable = a.length === ma[0].length;
           const bStable = b.length === mb[0].length;
           if (aStable && !bStable) return -1;
@@ -245,6 +259,8 @@ export function parseExtractPluginsOptions(args: string[]): {
       options.global = true;
     } else if (arg === '-y' || arg === '--yes') {
       options.yes = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
     }
   }
 
