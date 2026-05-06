@@ -2,6 +2,10 @@
 
 This file provides guidance to AI coding agents working on the `skills` CLI codebase.
 
+**Reference docs:**
+- [cheatsheet.md](cheatsheet.md) — Day-to-day command workflow
+- [fork-strategy.md](fork-strategy.md) — Upstream sync and rebase strategy
+
 ## Project Overview
 
 Fork of `vercel-labs/skills` CLI with custom commands for syncing skills across multiple AI agents via a canonical master store pattern.

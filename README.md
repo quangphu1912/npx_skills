@@ -8,6 +8,11 @@ Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [50 more](#su
 
 ## Workflows
 
+**Reference docs:**
+- [cheatsheet.md](cheatsheet.md) — Quick command reference for multi-agent sync
+- [fork-strategy.md](fork-strategy.md) — Upstream sync and rebase strategy
+- [AGENTS.md](AGENTS.md) — Architecture and development guide
+
 Pick the flow that matches how you use skills:
 
 **Skill consumer** — install published skills from GitHub or registries:
