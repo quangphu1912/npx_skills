@@ -1,5 +1,5 @@
 {
-  "name": "@phule/skills",
+  "name": "@phu_le/skills",
   "version": "0.1.0",
   "description": "Migrate and sync your AI agent skills across Claude Code, Cursor, Codex, and 50 more tools",
   "type": "module",
