@@ -9,8 +9,7 @@ import { addSkillToLock, getAllLockedSkills, removeSkillFromLock } from './skill
 import { detectStow, stageToGit, readStowConfig } from './stow.ts';
 import { track } from './telemetry.ts';
 
-export interface ExtractPluginsOptions {
-  global?: boolean;
+export interface ExtractClaudePluginsOptions {
   yes?: boolean;
   dryRun?: boolean;
 }
@@ -23,18 +22,17 @@ interface PluginSkill {
   skillPath: string;
 }
 
-export async function runExtractPlugins(options: ExtractPluginsOptions): Promise<void> {
-  const isGlobal = options.global ?? true;
+export async function runExtractClaudePlugins(options: ExtractClaudePluginsOptions): Promise<void> {
   const cwd = process.cwd();
   const dryRun = options.dryRun ?? false;
 
-  p.intro(pc.bgCyan(pc.black(' skills extract-plugins ')));
+  p.intro(pc.bgCyan(pc.black(' skills extract-claude-plugins ')));
 
   if (dryRun) {
     p.log.warn(pc.yellow('[dry-run] No filesystem changes will be made'));
   }
 
-  const canonicalDir = getCanonicalSkillsDir(isGlobal, cwd);
+  const canonicalDir = getCanonicalSkillsDir(true, cwd);
   const pluginsCacheDir = join(homedir(), '.claude', 'plugins', 'cache');
   const lockedSkills = await getAllLockedSkills();
 
@@ -249,15 +247,13 @@ async function isDir(path: string): Promise<boolean> {
   }
 }
 
-export function parseExtractPluginsOptions(args: string[]): {
-  options: ExtractPluginsOptions;
+export function parseExtractClaudePluginsOptions(args: string[]): {
+  options: ExtractClaudePluginsOptions;
 } {
-  const options: ExtractPluginsOptions = {};
+  const options: ExtractClaudePluginsOptions = {};
 
   for (const arg of args) {
-    if (arg === '-g' || arg === '--global') {
-      options.global = true;
-    } else if (arg === '-y' || arg === '--yes') {
+    if (arg === '-y' || arg === '--yes') {
       options.yes = true;
     } else if (arg === '--dry-run') {
       options.dryRun = true;

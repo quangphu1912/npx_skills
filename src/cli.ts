@@ -16,7 +16,10 @@ import { runSync, parseSyncOptions } from './sync.ts';
 import { runImport, parseImportOptions } from './import-skills.ts';
 import { runDistribute, parseDistributeOptions } from './distribute.ts';
 import { runSyncManaged, parseSyncManagedOptions } from './sync-managed.ts';
-import { runExtractPlugins, parseExtractPluginsOptions } from './extract-plugins.ts';
+import {
+  runExtractClaudePlugins,
+  parseExtractClaudePluginsOptions,
+} from './extract-claude-plugins.ts';
 import { runListAgents } from './list-agents.ts';
 import { track, flushTelemetry } from './telemetry.ts';
 import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.ts';
@@ -116,7 +119,7 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx skills managed-sync${RESET}         ${DIM}Import + distribute in one step${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills extract-plugins${RESET}     ${DIM}Extract Claude plugin skills to master${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx skills extract-claude-plugins${RESET}     ${DIM}Extract Claude plugin skills to master${RESET}`
   );
   console.log();
   console.log(`${DIM}try:${RESET} npx skills add vercel-labs/agent-skills`);
@@ -154,7 +157,7 @@ ${BOLD}Skill Distribution:${RESET}
   import <path>        Import local skill(s) to master store (symlink by default)
   distribute           Distribute master skills to all agents via symlinks
   managed-sync         Import from watched dirs + distribute in one step
-  extract-plugins      Extract Claude plugin skills to master store
+  extract-claude-plugins  Extract Claude plugin skills to master store
   agents               List all supported agents and their install status
 
 ${BOLD}Managed Sync Options:${RESET}
@@ -162,8 +165,7 @@ ${BOLD}Managed Sync Options:${RESET}
   -y, --yes              Skip confirmation prompts
   --dry-run              Print what would change without making any filesystem changes
 
-${BOLD}Extract Plugins Options:${RESET}
-  -g, --global           Extract to global master store
+${BOLD}Extract Claude Plugins Options:${RESET}
   -y, --yes              Skip confirmation prompts
   --dry-run              Print what would change without making any filesystem changes
 
@@ -236,7 +238,7 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills distribute -g -y               ${DIM}# fan out to all agents${RESET}
   ${DIM}$${RESET} skills agents                         ${DIM}# list supported agents${RESET}
   ${DIM}$${RESET} skills managed-sync -g -y             ${DIM}# import + distribute in one step${RESET}
-  ${DIM}$${RESET} skills extract-plugins -g -y          ${DIM}# extract plugin skills${RESET}
+  ${DIM}$${RESET} skills extract-claude-plugins -y      ${DIM}# extract plugin skills${RESET}
   ${DIM}$${RESET} skills distribute --dry-run -g -y     ${DIM}# preview without changes${RESET}
 
 Discover more skills at ${TEXT}https://skills.sh/${RESET}
@@ -1016,11 +1018,11 @@ async function main(): Promise<void> {
       await runSyncManaged(syncManagedOpts);
       break;
     }
-    case 'extract-plugins': {
+    case 'extract-claude-plugins': {
       showLogo();
       console.log();
-      const { options: extractPluginsOpts } = parseExtractPluginsOptions(restArgs);
-      await runExtractPlugins(extractPluginsOpts);
+      const { options: extractPluginsOpts } = parseExtractClaudePluginsOptions(restArgs);
+      await runExtractClaudePlugins(extractPluginsOpts);
       break;
     }
     case 'agents': {

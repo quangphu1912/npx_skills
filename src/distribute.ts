@@ -78,7 +78,9 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
     targetAgents = installed.filter((a) => !isUniversalAgent(a));
   }
 
-  const nonUniversalTargets = targetAgents.filter((a) => !isUniversalAgent(a));
+  const nonUniversalTargets = targetAgents.filter(
+    (a) => !isUniversalAgent(a) && a !== 'claude-code'
+  );
   const universalTargets = targetAgents.filter((a) => isUniversalAgent(a));
 
   if (nonUniversalTargets.length === 0) {
@@ -145,7 +147,10 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
       const entryStat = await lstat(entryPath).catch(() => null);
       if (!entryStat?.isSymbolicLink()) continue;
       const target = await realpath(entryPath).catch(() => null);
-      if (target && target.startsWith(canonicalRealPath + '/') && !skillNames.includes(entry)) {
+      const isBroken = target === null;
+      const isStale =
+        target && target.startsWith(canonicalRealPath + '/') && !skillNames.includes(entry);
+      if (isBroken || isStale) {
         if (!dryRun) {
           await rm(entryPath, { force: true }).catch(() => {});
         }
