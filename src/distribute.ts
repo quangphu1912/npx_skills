@@ -3,7 +3,12 @@ import pc from 'picocolors';
 import { readdir, lstat, rm, realpath } from 'fs/promises';
 import { join } from 'path';
 import { getCanonicalSkillsDir, getAgentBaseDir, distributeSkillToAgents } from './installer.ts';
-import { agents, getNonUniversalAgents, isUniversalAgent } from './agents.ts';
+import {
+  agents,
+  detectInstalledAgents,
+  getNonUniversalAgents,
+  isUniversalAgent,
+} from './agents.ts';
 import { readStowConfig, detectStow, stageToGit } from './stow.ts';
 import { track } from './telemetry.ts';
 import type { AgentType } from './types.ts';
@@ -63,11 +68,14 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
   // Determine target agents
   let targetAgents: AgentType[];
   if (options.agent?.includes('*')) {
-    targetAgents = Object.keys(agents) as AgentType[];
+    // Explicit '*' targets all non-universal agents regardless of install status
+    targetAgents = getNonUniversalAgents();
   } else if (options.agent && options.agent.length > 0) {
     targetAgents = options.agent as AgentType[];
   } else {
-    targetAgents = getNonUniversalAgents();
+    // Default: only target installed non-universal agents
+    const installed = await detectInstalledAgents();
+    targetAgents = installed.filter((a) => !isUniversalAgent(a));
   }
 
   const nonUniversalTargets = targetAgents.filter((a) => !isUniversalAgent(a));
