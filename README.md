@@ -18,17 +18,22 @@ npx skills update                             # keep skills fresh
 npx skills remove my-skill -g                 # remove when done
 ```
 
+**Multi-agent sync** — share skills across all your AI agents from a single canonical store (`~/.agents/skills/`):
+```bash
+skills agents                                  # see which agents are installed
+skills import ~/.claude/skills/standards-go -g # import a skill into canonical store
+skills extract-claude-plugins -y               # extract plugin skills from Claude Code
+skills distribute -g -y                        # fan out to all non-universal agents
+skills remove standards-go -g -y              # remove (source untouched, tracked in intent)
+```
+
+Universal agents (Codex, Cursor, Gemini CLI, OpenCode, etc.) share `~/.agents/skills/` directly — no symlinks needed. Non-universal agents (Qwen, Kiro, KiloCode, Windsurf) get per-skill symlinks via `distribute`. Claude Code is excluded from distribute since it's typically the skill source.
+
 **Skill author** — develop and test your own skills locally:
 ```bash
 npx skills init my-skill                      # scaffold SKILL.md
-npx skills import ./my-skill -g              # symlink into master store
+npx skills import ./my-skill -g              # symlink into canonical store
 npx skills distribute -g -y                  # fan out to all your agents
-```
-
-**Plugin user** — extract skills bundled inside IDE plugins:
-```bash
-npx skills extract-plugins -g -y             # copy from plugin bundles
-npx skills distribute -g -y                  # fan out to all agents
 ```
 
 **Dotfiles power-user** — auto-sync watched dirs via GNU Stow:
@@ -39,7 +44,17 @@ npx skills distribute -g -y                  # fan out to all agents
 ```bash
 npx skills managed-sync -g -y               # import new + distribute in one step
 ```
-New skills dropped into a `watchedDir` are picked up automatically. With `autoGit: true`, changes are committed to your dotfiles repo.
+
+### Safety flags
+
+All destructive commands support `--dry-run` to preview changes without modifying the filesystem:
+```bash
+skills import ./my-skill -g --dry-run -y
+skills distribute -g --dry-run -y
+skills remove my-skill -g --dry-run -y
+skills extract-claude-plugins --dry-run
+skills managed-sync -g --dry-run -y
+```
 
 ---
 
@@ -136,6 +151,11 @@ When installing interactively, you can choose:
 | `npx skills remove [skills]` | Remove installed skills from agents           |
 | `npx skills update [skills]` | Update installed skills to latest versions    |
 | `npx skills init [name]`     | Create a new SKILL.md template                |
+| `skills import <path> -g`    | Import skills into canonical store via symlink |
+| `skills distribute -g -y`    | Distribute canonical skills to all agents     |
+| `skills extract-claude-plugins -y` | Extract Claude Code plugin skills to canonical |
+| `skills agents`              | List all supported agents and install status  |
+| `skills managed-sync -g -y`  | Import + distribute in one step               |
 
 ### `skills list`
 
