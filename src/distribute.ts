@@ -79,6 +79,7 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
   }
 
   const nonUniversalTargets = targetAgents.filter((a) => !isUniversalAgent(a));
+  const universalTargets = targetAgents.filter((a) => isUniversalAgent(a));
 
   if (nonUniversalTargets.length === 0) {
     p.log.info(pc.dim('All target agents are universal — no symlinks needed'));
@@ -88,6 +89,14 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
 
   const agentNames = nonUniversalTargets.map((a) => agents[a].displayName);
   p.log.info(pc.dim(`Targeting ${nonUniversalTargets.length} agent(s): ${agentNames.join(', ')}`));
+  if (universalTargets.length > 0) {
+    const universalNames = universalTargets.map((a) => agents[a].displayName);
+    p.log.info(
+      pc.dim(
+        `Skipped ${universalTargets.length} universal agent(s) (share canonical dir): ${universalNames.join(', ')}`
+      )
+    );
+  }
 
   if (!options.yes && !dryRun) {
     const confirmed = await p.confirm({
