@@ -83,7 +83,7 @@ describe('removeCommand canonical protection', () => {
     ).toBe(true);
   });
 
-  it('should remove canonical storage if NO other agents are using it', async () => {
+  it('should preserve canonical storage when removing from specific agent', async () => {
     const skillName = 'test-skill-2';
     const canonicalPath = join(tempDir, '.agents/skills', skillName);
     const claudePath = join(tempDir, '.claude/skills', skillName);
@@ -95,11 +95,12 @@ describe('removeCommand canonical protection', () => {
     // Mock agents: Only Claude is installed
     vi.mocked(agentsModule.detectInstalledAgents).mockResolvedValue(['claude-code']);
 
-    // Remove from Claude
+    // Remove from Claude only (--agent claude-code)
     await removeCommand([skillName], { agent: ['claude-code'], yes: true });
 
-    // Both should be gone
+    // Claude symlink should be gone
     await expect(lstat(claudePath)).rejects.toThrow();
-    await expect(lstat(canonicalPath)).rejects.toThrow();
+    // Canonical master should be preserved (only cleaned up on full remove)
+    expect((await lstat(canonicalPath)).isDirectory()).toBe(true);
   });
 });
