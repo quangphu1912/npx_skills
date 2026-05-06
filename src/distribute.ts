@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { readdir, lstat, symlink, rm, mkdir, realpath } from 'fs/promises';
-import { join, relative } from 'path';
-import { getCanonicalSkillsDir, getAgentBaseDir } from './installer.ts';
+import { readdir, lstat, rm, realpath } from 'fs/promises';
+import { join } from 'path';
+import { getCanonicalSkillsDir, getAgentBaseDir, distributeSkillToAgents } from './installer.ts';
 import { agents, getNonUniversalAgents, isUniversalAgent } from './agents.ts';
 import { readStowConfig, detectStow, stageToGit } from './stow.ts';
 import { track } from './telemetry.ts';
@@ -13,6 +13,7 @@ export interface DistributeOptions {
   yes?: boolean;
   agent?: string[];
   quiet?: boolean;
+  dryRun?: boolean;
 }
 
 interface DistributeResult {
@@ -24,8 +25,13 @@ interface DistributeResult {
 export async function runDistribute(options: DistributeOptions): Promise<void> {
   const isGlobal = options.global ?? true;
   const cwd = process.cwd();
+  const dryRun = options.dryRun ?? false;
 
   p.intro(pc.bgCyan(pc.black(' skills distribute ')));
+
+  if (dryRun) {
+    p.log.warn(pc.yellow('[dry-run] No filesystem changes will be made'));
+  }
 
   const canonicalDir = getCanonicalSkillsDir(isGlobal, cwd);
 
@@ -61,11 +67,9 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
   } else if (options.agent && options.agent.length > 0) {
     targetAgents = options.agent as AgentType[];
   } else {
-    // Only distribute to non-universal agents (universal agents share canonical dir)
     targetAgents = getNonUniversalAgents();
   }
 
-  // Filter out universal agents — they already have access to canonical dir
   const nonUniversalTargets = targetAgents.filter((a) => !isUniversalAgent(a));
 
   if (nonUniversalTargets.length === 0) {
@@ -74,11 +78,10 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
     return;
   }
 
-  // Show what we're about to do
   const agentNames = nonUniversalTargets.map((a) => agents[a].displayName);
   p.log.info(pc.dim(`Targeting ${nonUniversalTargets.length} agent(s): ${agentNames.join(', ')}`));
 
-  if (!options.yes) {
+  if (!options.yes && !dryRun) {
     const confirmed = await p.confirm({
       message: `Distribute ${skillNames.length} skill(s) to ${nonUniversalTargets.length} agent(s)?`,
     });
@@ -89,55 +92,25 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
   }
 
   const spinner = p.spinner();
-  spinner.start('Distributing skills...');
+  spinner.start(dryRun ? 'Calculating distribution...' : 'Distributing skills...');
 
   const results: DistributeResult[] = [];
 
   for (const skillName of skillNames) {
-    const canonicalSkillPath = join(canonicalDir, skillName);
-
-    for (const agentType of nonUniversalTargets) {
-      const agent = agents[agentType];
-      const agentBase = getAgentBaseDir(agentType, isGlobal, cwd);
-      const agentSkillPath = join(agentBase, skillName);
-
-      try {
-        // Ensure agent skills directory exists
-        await mkdir(agentBase, { recursive: true });
-
-        // Check existing
-        const existing = await lstat(agentSkillPath).catch(() => null);
-        if (existing?.isSymbolicLink()) {
-          const resolvedExisting = await realpath(agentSkillPath).catch(() => '');
-          const resolvedCanonical = await realpath(canonicalSkillPath).catch(
-            () => canonicalSkillPath
-          );
-          if (resolvedExisting === resolvedCanonical) {
-            results.push({ skill: skillName, agent: agent.displayName, action: 'skipped' });
-            continue;
-          }
-          // Stale symlink — remove and recreate
-          await rm(agentSkillPath);
-        } else if (existing?.isDirectory()) {
-          // Real directory exists — skip unless forced
-          results.push({ skill: skillName, agent: agent.displayName, action: 'skipped' });
-          continue;
-        }
-
-        // Create symlink
-        const relativePath = relative(agentBase, canonicalSkillPath);
-        const symlinkType = process.platform === 'win32' ? 'junction' : undefined;
-        await symlink(relativePath, agentSkillPath, symlinkType);
-        results.push({ skill: skillName, agent: agent.displayName, action: 'created' });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        p.log.warn(pc.dim(`Skipped ${skillName} → ${agent.displayName}: ${msg}`));
-        results.push({ skill: skillName, agent: agent.displayName, action: 'skipped' });
+    const agentResults = await distributeSkillToAgents(skillName, nonUniversalTargets, {
+      isGlobal,
+      cwd,
+      dryRun,
+    });
+    for (const r of agentResults) {
+      if (r.error) {
+        p.log.warn(pc.dim(`Skipped ${skillName} → ${agents[r.agent].displayName}: ${r.error}`));
       }
+      results.push({ skill: skillName, agent: agents[r.agent].displayName, action: r.action });
     }
   }
 
-  spinner.stop('Distribution complete');
+  spinner.stop(dryRun ? 'Calculation complete' : 'Distribution complete');
 
   // Prune stale symlinks from agent dirs (symlinks pointing into canonical that no longer exist)
   const canonicalRealPath = await realpath(canonicalDir).catch(() => canonicalDir);
@@ -155,9 +128,10 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
       const entryStat = await lstat(entryPath).catch(() => null);
       if (!entryStat?.isSymbolicLink()) continue;
       const target = await realpath(entryPath).catch(() => null);
-      // Only prune symlinks that point into our canonical dir (not user-managed symlinks)
       if (target && target.startsWith(canonicalRealPath + '/') && !skillNames.includes(entry)) {
-        await rm(entryPath, { force: true }).catch(() => {});
+        if (!dryRun) {
+          await rm(entryPath, { force: true }).catch(() => {});
+        }
         pruned++;
       }
     }
@@ -165,50 +139,60 @@ export async function runDistribute(options: DistributeOptions): Promise<void> {
 
   // Summary
   const created = results.filter((r) => r.action === 'created');
+  const updated = results.filter((r) => r.action === 'updated');
   const skipped = results.filter((r) => r.action === 'skipped');
+  const prefix = dryRun ? pc.yellow('[dry-run] Would create') : pc.green('Created');
+  const updatePrefix = dryRun ? pc.yellow('[dry-run] Would update') : pc.cyan('Updated');
 
   console.log();
   if (created.length > 0) {
-    p.log.success(pc.green(`Created ${created.length} symlink(s)`));
+    p.log.success(`${prefix} ${created.length} symlink(s)`);
     for (const r of created) {
       p.log.message(`  ${pc.green('✓')} ${r.skill} → ${r.agent}`);
     }
   }
+  if (updated.length > 0) {
+    p.log.info(`${updatePrefix} ${updated.length} symlink(s)`);
+  }
   if (skipped.length > 0) {
-    const alreadyValid = skipped.length;
-    p.log.info(pc.dim(`${alreadyValid} symlink(s) already valid or skipped`));
+    p.log.info(pc.dim(`${skipped.length} symlink(s) already valid or skipped`));
   }
   if (pruned > 0) {
-    p.log.info(pc.yellow(`Pruned ${pruned} stale symlink(s)`));
+    const prunePrefix = dryRun ? '[dry-run] Would prune' : 'Pruned';
+    p.log.info(pc.yellow(`${prunePrefix} ${pruned} stale symlink(s)`));
   }
 
-  // Git staging for stow-managed paths
-  const config = readStowConfig();
-  const stowInfo = await detectStow(canonicalDir);
-  if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && created.length > 0) {
-    const uniqueSkills = [...new Set(created.map((r) => r.skill))];
-    const gitResult = stageToGit(
-      stowInfo.repoPath,
-      uniqueSkills.map((n) => join(canonicalDir, n)),
-      `feat(skills): distribute ${uniqueSkills.join(', ')}`
-    );
-    if (gitResult.ok) {
-      p.log.info(pc.dim(`Git: committed distribution to ${stowInfo.repoPath}`));
-    } else {
-      p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
+  // Git staging for stow-managed paths (skip in dry-run)
+  if (!dryRun) {
+    const config = readStowConfig();
+    const stowInfo = await detectStow(canonicalDir);
+    if (stowInfo.isStow && config.autoGit && stowInfo.repoPath && created.length > 0) {
+      const uniqueSkills = [...new Set(created.map((r) => r.skill))];
+      const gitResult = stageToGit(
+        stowInfo.repoPath,
+        uniqueSkills.map((n) => join(canonicalDir, n)),
+        `feat(skills): distribute ${uniqueSkills.join(', ')}`
+      );
+      if (gitResult.ok) {
+        p.log.info(pc.dim(`Git: committed distribution to ${stowInfo.repoPath}`));
+      } else {
+        p.log.warn(pc.yellow(`Git commit failed: ${gitResult.error}`));
+      }
     }
   }
 
-  track({
-    event: 'distribute',
-    skillCount: String(skillNames.length),
-    agentCount: String(nonUniversalTargets.length),
-    created: String(created.length),
-  });
+  if (!dryRun) {
+    track({
+      event: 'distribute',
+      skillCount: String(skillNames.length),
+      agentCount: String(nonUniversalTargets.length),
+      created: String(created.length),
+    });
+  }
 
   if (!options.quiet) {
     console.log();
-    p.outro(pc.green('Done!'));
+    p.outro(pc.green(dryRun ? 'Dry run complete — no changes made.' : 'Done!'));
   }
 }
 
@@ -223,6 +207,8 @@ export function parseDistributeOptions(args: string[]): {
       options.global = true;
     } else if (arg === '-y' || arg === '--yes') {
       options.yes = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
     } else if (arg === '-a' || arg === '--agent') {
       options.agent = options.agent || [];
       i++;

@@ -5,7 +5,8 @@ import { existsSync } from 'fs';
 import { basename, join, resolve, relative } from 'path';
 import { homedir } from 'os';
 import { getCanonicalSkillsDir, sanitizeName } from './installer.ts';
-import { addSkillToLock, removeFromRemoved } from './skill-lock.ts';
+import { addSkillToLock } from './skill-lock.ts';
+import { removeFromRemoved } from './skill-intent.ts';
 import { detectStow, stageToGit, readStowConfig } from './stow.ts';
 import { track } from './telemetry.ts';
 

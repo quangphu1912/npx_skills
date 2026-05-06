@@ -165,6 +165,7 @@ ${BOLD}Distribute Options:${RESET}
   -g, --global           Distribute global skills
   -a, --agent <agents>   Target specific agents
   -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
 
 ${BOLD}Add Options:${RESET}
   -g, --global           Install skill globally (user-level) instead of project-level

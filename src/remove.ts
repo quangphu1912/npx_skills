@@ -4,7 +4,8 @@ import { readdir, rm, lstat } from 'fs/promises';
 import { join } from 'path';
 import { agents, detectInstalledAgents } from './agents.ts';
 import { track } from './telemetry.ts';
-import { removeSkillFromLock, getSkillFromLock, addToRemoved } from './skill-lock.ts';
+import { removeSkillFromLock, getSkillFromLock } from './skill-lock.ts';
+import { addToRemoved } from './skill-intent.ts';
 import type { AgentType } from './types.ts';
 import {
   getInstallPath,

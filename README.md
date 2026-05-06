@@ -6,6 +6,43 @@ The CLI for the open agent skills ecosystem.
 Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [50 more](#supported-agents).
 <!-- agent-list:end -->
 
+## Workflows
+
+Pick the flow that matches how you use skills:
+
+**Skill consumer** — install published skills from GitHub or registries:
+```bash
+npx skills add vercel-labs/agent-skills -g   # install globally
+npx skills list -g                            # see what's installed
+npx skills update                             # keep skills fresh
+npx skills remove my-skill -g                 # remove when done
+```
+
+**Skill author** — develop and test your own skills locally:
+```bash
+npx skills init my-skill                      # scaffold SKILL.md
+npx skills import ./my-skill -g              # symlink into master store
+npx skills distribute -g -y                  # fan out to all your agents
+```
+
+**Plugin user** — extract skills bundled inside IDE plugins:
+```bash
+npx skills extract-plugins -g -y             # copy from plugin bundles
+npx skills distribute -g -y                  # fan out to all agents
+```
+
+**Dotfiles power-user** — auto-sync watched dirs via GNU Stow:
+```json
+// ~/.agents/.skill-config.json
+{ "stowManaged": true, "stowRepoPath": "~/dotfiles", "watchedDirs": ["~/dotfiles/skills"], "autoGit": true }
+```
+```bash
+npx skills managed-sync -g -y               # import new + distribute in one step
+```
+New skills dropped into a `watchedDir` are picked up automatically. With `autoGit: true`, changes are committed to your dotfiles repo.
+
+---
+
 ## Install a Skill
 
 ```bash

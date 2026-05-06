@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from 'fs';
-import { join, dirname, resolve } from 'path';
+import { join, dirname, resolve, sep } from 'path';
 import { lstat, realpath } from 'fs/promises';
 import { execFileSync } from 'child_process';
 import { homedir } from 'os';
@@ -74,13 +74,29 @@ function detectStowByConfig(targetPath: string): StowInfo {
 }
 
 /**
- * Walk up from a directory to find the nearest .git (file or directory).
+ * Walk up from a directory to find the nearest .git, then verify startDir is
+ * actually inside that worktree. This prevents matching an unrelated repo
+ * (e.g. a home-directory backup repo at ~/.git) and committing to the wrong tree.
  */
 function findGitRepo(startDir: string): string | null {
   let dir = startDir;
   for (let i = 0; i < 20; i++) {
     if (existsSync(join(dir, '.git'))) {
-      return dir;
+      try {
+        const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+          cwd: startDir,
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+        const resolvedTop = resolve(toplevel);
+        const resolvedStart = resolve(startDir);
+        if (resolvedStart === resolvedTop || resolvedStart.startsWith(resolvedTop + sep)) {
+          return dir;
+        }
+        return null; // startDir not inside this worktree
+      } catch {
+        return null; // git unavailable or not a valid repo
+      }
     }
     const parent = dirname(dir);
     if (parent === dir) break;
