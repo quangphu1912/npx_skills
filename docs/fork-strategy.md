@@ -27,7 +27,9 @@ These don't exist upstream — rebases will never touch them:
 - `src/skill-intent.ts`
 - `src/stow.ts`
 - `src/list-agents.ts`
-- `cheatsheet.md`
+- `docs/cheatsheet.md`
+- `docs/fork-strategy.md`
+- `docs/npx-skills-cheatsheet.md`
 
 ### Shared files (conflict risk)
 

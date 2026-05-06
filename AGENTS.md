@@ -3,8 +3,9 @@
 This file provides guidance to AI coding agents working on the `skills` CLI codebase.
 
 **Reference docs:**
-- [cheatsheet.md](cheatsheet.md) — Day-to-day command workflow
-- [fork-strategy.md](fork-strategy.md) — Upstream sync and rebase strategy
+- [docs/npx-skills-cheatsheet.md](docs/npx-skills-cheatsheet.md) — Native `npx skills` command reference
+- [docs/cheatsheet.md](docs/cheatsheet.md) — Multi-agent sync workflow (import, distribute, extract)
+- [docs/fork-strategy.md](docs/fork-strategy.md) — Upstream sync and rebase strategy
 
 ## Project Overview
 
