@@ -17,6 +17,7 @@ import { runImport, parseImportOptions } from './import-skills.ts';
 import { runDistribute, parseDistributeOptions } from './distribute.ts';
 import { runSyncManaged, parseSyncManagedOptions } from './sync-managed.ts';
 import { runExtractPlugins, parseExtractPluginsOptions } from './extract-plugins.ts';
+import { runListAgents } from './list-agents.ts';
 import { track, flushTelemetry } from './telemetry.ts';
 import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.ts';
 import { readLocalLock, type LocalSkillLockEntry } from './local-lock.ts';
@@ -154,6 +155,7 @@ ${BOLD}Skill Distribution:${RESET}
   distribute           Distribute master skills to all agents via symlinks
   managed-sync         Import from watched dirs + distribute in one step
   extract-plugins      Extract Claude plugin skills to master store
+  agents               List all supported agents and their install status
 
 ${BOLD}Managed Sync Options:${RESET}
   -g, --global           Sync global skills
@@ -1013,6 +1015,12 @@ async function main(): Promise<void> {
       console.log();
       const { options: extractPluginsOpts } = parseExtractPluginsOptions(restArgs);
       await runExtractPlugins(extractPluginsOpts);
+      break;
+    }
+    case 'agents': {
+      showLogo();
+      console.log();
+      await runListAgents();
       break;
     }
     case 'check':
