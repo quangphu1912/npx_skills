@@ -8,6 +8,7 @@ import {
   rm,
   readlink,
   readFile,
+  rename,
   writeFile,
   stat,
   chmod,
@@ -260,6 +261,100 @@ async function createSymlink(target: string, linkPath: string): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+export interface DistributeSkillOptions {
+  isGlobal: boolean;
+  cwd: string;
+  dryRun?: boolean;
+}
+
+export interface DistributeSkillResult {
+  agent: AgentType;
+  action: 'created' | 'updated' | 'skipped';
+  error?: string;
+}
+
+/**
+ * Fan a single skill out from the canonical store to each target agent via symlink.
+ * Universal agents (those whose skillsDir IS the canonical store) are skipped since
+ * they already have access. Returns a result per agent for caller-side summary reporting.
+ */
+export async function distributeSkillToAgents(
+  skillName: string,
+  agentTypes: AgentType[],
+  options: DistributeSkillOptions
+): Promise<DistributeSkillResult[]> {
+  const { isGlobal, cwd, dryRun = false } = options;
+  const canonicalSkillPath = join(getCanonicalSkillsDir(isGlobal, cwd), skillName);
+  const results: DistributeSkillResult[] = [];
+
+  for (const agentType of agentTypes) {
+    if (isUniversalAgent(agentType)) {
+      results.push({ agent: agentType, action: 'skipped' });
+      continue;
+    }
+
+    const agentBase = getAgentBaseDir(agentType, isGlobal, cwd);
+    const agentSkillPath = join(agentBase, skillName);
+
+    try {
+      if (!dryRun) {
+        await mkdir(agentBase, { recursive: true });
+      }
+
+      const existing = await lstat(agentSkillPath).catch(() => null);
+
+      if (existing?.isSymbolicLink()) {
+        const resolvedExisting = await realpath(agentSkillPath).catch(() => '');
+        const resolvedCanonical = await realpath(canonicalSkillPath).catch(
+          () => canonicalSkillPath
+        );
+        if (resolvedExisting === resolvedCanonical) {
+          results.push({ agent: agentType, action: 'skipped' });
+          continue;
+        }
+        // Stale symlink — update atomically on POSIX, non-atomically on Windows
+        if (!dryRun) {
+          const symlinkType = process.platform === 'win32' ? 'junction' : undefined;
+          const realAgentBase = await realpath(agentBase).catch(() => agentBase);
+          const relativePath = relative(realAgentBase, canonicalSkillPath);
+          if (process.platform === 'win32') {
+            await rm(agentSkillPath);
+            await symlink(relativePath, agentSkillPath, symlinkType);
+          } else {
+            const tmpPath = agentSkillPath + '.tmp-' + process.pid;
+            await symlink(relativePath, tmpPath);
+            await rename(tmpPath, agentSkillPath);
+          }
+        }
+        results.push({ agent: agentType, action: 'updated' });
+        continue;
+      }
+
+      if (existing?.isDirectory()) {
+        results.push({ agent: agentType, action: 'skipped' });
+        continue;
+      }
+
+      // No entry — create new symlink
+      if (!dryRun) {
+        const symlinkType = process.platform === 'win32' ? 'junction' : undefined;
+        const realAgentBase = await realpath(agentBase).catch(() => agentBase);
+        const relativePath = relative(realAgentBase, canonicalSkillPath);
+        await symlink(relativePath, agentSkillPath, symlinkType);
+      }
+      results.push({ agent: agentType, action: 'created' });
+    } catch (err) {
+      results.push({
+        agent: agentType,
+        action: 'skipped',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return results;
 }
 
 export async function installSkillForAgent(

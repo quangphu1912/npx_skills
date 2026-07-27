@@ -7,7 +7,7 @@ import pc from 'picocolors';
 
 const AGENTS_DIR = '.agents';
 const LOCK_FILE = '.skill-lock.json';
-const CURRENT_VERSION = 3; // Bumped from 2 to 3 for folder hash support (GitHub tree SHA)
+const CURRENT_VERSION = 4; // Bumped from 3: intent fields (removed/dismissed/lastSelectedAgents) moved to .skill-intent.json
 
 /**
  * Represents a single installed skill entry in the lock file.
@@ -35,6 +35,8 @@ export interface SkillLockEntry {
   updatedAt: string;
   /** Name of the plugin this skill belongs to (if any) */
   pluginName?: string;
+  /** Version of the plugin at extraction time (for staleness detection) */
+  pluginVersion?: string;
 }
 
 /**
@@ -89,9 +91,20 @@ export async function readSkillLock(): Promise<SkillLockFile> {
       return createEmptyLockFile();
     }
 
-    // If old version, wipe and start fresh (backwards incompatible change)
-    // v3 adds skillFolderHash - we want fresh installs to populate it
+    // If old version, back up the old file then start fresh (backwards-incompatible)
     if (parsed.version < CURRENT_VERSION) {
+      const backupPath = `${lockPath}.v${parsed.version}.bak`;
+      try {
+        await writeFile(backupPath, content, 'utf-8');
+      } catch (backupErr) {
+        console.warn(
+          `⚠ Skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backup failed (${backupErr instanceof Error ? backupErr.message : String(backupErr)}). Run 'npx skills update' to repopulate.`
+        );
+        return createEmptyLockFile();
+      }
+      console.warn(
+        `⚠ Skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backed up to ${backupPath}. Run 'npx skills update' to repopulate.`
+      );
       return createEmptyLockFile();
     }
 

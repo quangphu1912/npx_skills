@@ -344,7 +344,7 @@ This is a test skill.
         lockPath,
         JSON.stringify(
           {
-            version: 3,
+            version: 4,
             skills: {
               'ce:review': {
                 source: 'everyinc/compound-engineering-plugin',

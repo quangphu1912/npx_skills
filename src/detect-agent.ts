@@ -45,7 +45,7 @@ const agentNameToType: Record<string, AgentType> = {
   cowork: 'claude-code',
   devin: 'universal', // Devin not in skills-cli agent list, use universal
   replit: 'replit',
-  gemini: 'gemini-cli',
+  gemini: 'universal', // gemini-cli removed from this fork, use universal
   codex: 'codex',
   antigravity: 'antigravity',
   'augment-cli': 'augment',

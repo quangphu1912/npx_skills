@@ -9,10 +9,32 @@ import { runInstallFromLock } from './install.ts';
 import { runList } from './list.ts';
 import { removeCommand, parseRemoveOptions } from './remove.ts';
 import { runSync, parseSyncOptions } from './sync.ts';
-import { flushTelemetry } from './telemetry.ts';
+import { runImport, parseImportOptions } from './import-skills.ts';
+import { runDistribute, parseDistributeOptions } from './distribute.ts';
+import { runSyncManaged, parseSyncManagedOptions } from './sync-managed.ts';
+import {
+  runExtractClaudePlugins,
+  parseExtractClaudePluginsOptions,
+} from './extract-claude-plugins.ts';
+import { runListAgents } from './list-agents.ts';
+import { track, flushTelemetry } from './telemetry.ts';
 import { isRunningInAgent } from './detect-agent.ts';
 import { runUpdate } from './update.ts';
 import { runUse, parseUseOptions } from './use.ts';
+import { agents, isUniversalAgent } from './agents.ts';
+import type { AgentType } from './types.ts';
+import {
+  fetchSkillFolderHash,
+  getGitHubToken,
+  readSkillLock,
+  type SkillLockEntry,
+} from './skill-lock.ts';
+import { readLocalLock, type LocalSkillLockEntry } from './local-lock.ts';
+import {
+  buildUpdateInstallSource,
+  buildLocalUpdateSource,
+  formatSourceInput,
+} from './update-source.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -96,6 +118,19 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx skills experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
   );
   console.log();
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills import${RESET}              ${DIM}Import local skills to master store${RESET}`
+  );
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills distribute${RESET}           ${DIM}Distribute skills to all agents${RESET}`
+  );
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills managed-sync${RESET}         ${DIM}Import + distribute in one step${RESET}`
+  );
+  console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills extract-claude-plugins${RESET}     ${DIM}Extract Claude plugin skills to master${RESET}`
+  );
+  console.log();
   console.log(`${DIM}try:${RESET} npx skills add vercel-labs/agent-skills`);
   console.log();
   console.log(`Discover more skills at ${TEXT}https://skills.sh/${RESET}`);
@@ -132,6 +167,35 @@ ${BOLD}Project:${RESET}
   init [name]          Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)
   experimental_sync    Sync skills from node_modules into agent directories
 
+${BOLD}Skill Distribution:${RESET}
+  import <path>        Import local skill(s) to master store (symlink by default)
+  distribute           Distribute master skills to all agents via symlinks
+  managed-sync         Import from watched dirs + distribute in one step
+  extract-claude-plugins  Extract Claude plugin skills to master store
+  agents               List all supported agents and their install status
+
+${BOLD}Managed Sync Options:${RESET}
+  -g, --global           Sync global skills
+  -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
+
+${BOLD}Extract Claude Plugins Options:${RESET}
+  -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
+
+${BOLD}Import Options:${RESET}
+  -g, --global           Import to global master store
+  --copy                 Copy files instead of symlinking
+  --name <name>          Override skill name
+  -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
+
+${BOLD}Distribute Options:${RESET}
+  -g, --global           Distribute global skills
+  -a, --agent <agents>   Target specific agents
+  -y, --yes              Skip confirmation prompts
+  --dry-run              Print what would change without making any filesystem changes
+
 ${BOLD}Add Options:${RESET}
   -g, --global           Install skill globally (user-level) instead of project-level
   -a, --agent <agents>   Specify agents to install to (use '*' for all agents)
@@ -157,6 +221,7 @@ ${BOLD}Remove Options:${RESET}
   -s, --skill <skills>   Specify skills to remove (use '*' for all skills)
   -y, --yes              Skip confirmation prompts
   --all                  Shorthand for --skill '*' --agent '*' -y
+  --dry-run              Print what would change without making any filesystem changes
   
 ${BOLD}Experimental Sync Options:${RESET}
   -a, --agent <agents>   Specify agents to install to (use '*' for all agents)
@@ -195,6 +260,12 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills init my-skill
   ${DIM}$${RESET} skills experimental_sync              ${DIM}# sync from node_modules${RESET}
   ${DIM}$${RESET} skills experimental_sync -y           ${DIM}# sync without prompts${RESET}
+  ${DIM}$${RESET} skills import ./my-skill -g           ${DIM}# import local skill to master store${RESET}
+  ${DIM}$${RESET} skills distribute -g -y               ${DIM}# fan out to all agents${RESET}
+  ${DIM}$${RESET} skills agents                         ${DIM}# list supported agents${RESET}
+  ${DIM}$${RESET} skills managed-sync -g -y             ${DIM}# import + distribute in one step${RESET}
+  ${DIM}$${RESET} skills extract-claude-plugins -y      ${DIM}# extract plugin skills${RESET}
+  ${DIM}$${RESET} skills distribute --dry-run -g -y     ${DIM}# preview without changes${RESET}
 
 Discover more skills at ${TEXT}https://skills.sh/${RESET}
 `);
@@ -376,6 +447,11 @@ async function main(): Promise<void> {
     case 'remove':
     case 'rm':
     case 'r': {
+      // Check for --help or -h flag
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        showRemoveHelp();
+        break;
+      }
       const { skills, options: removeOptions } = parseRemoveOptions(restArgs);
       await removeCommand(skills, removeOptions);
       break;
@@ -390,6 +466,40 @@ async function main(): Promise<void> {
     case 'ls':
       await runList(restArgs);
       break;
+    case 'import': {
+      showLogo();
+      console.log();
+      const { paths: importPaths, options: importOpts } = parseImportOptions(restArgs);
+      await runImport(importPaths, importOpts);
+      break;
+    }
+    case 'distribute': {
+      showLogo();
+      console.log();
+      const { options: distributeOpts } = parseDistributeOptions(restArgs);
+      await runDistribute(distributeOpts);
+      break;
+    }
+    case 'managed-sync': {
+      showLogo();
+      console.log();
+      const { options: syncManagedOpts } = parseSyncManagedOptions(restArgs);
+      await runSyncManaged(syncManagedOpts);
+      break;
+    }
+    case 'extract-claude-plugins': {
+      showLogo();
+      console.log();
+      const { options: extractPluginsOpts } = parseExtractClaudePluginsOptions(restArgs);
+      await runExtractClaudePlugins(extractPluginsOpts);
+      break;
+    }
+    case 'agents': {
+      showLogo();
+      console.log();
+      await runListAgents();
+      break;
+    }
     case 'check':
     case 'update':
     case 'upgrade':
@@ -411,4 +521,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().finally(() => flushTelemetry().then(() => process.exit(process.exitCode ?? 0)));
+main()
+  .catch((err: unknown) => {
+    console.error('\x1b[31m' + (err instanceof Error ? err.message : String(err)) + '\x1b[0m');
+    process.exitCode = 1;
+  })
+  .finally(() => flushTelemetry().then(() => process.exit(process.exitCode ?? 0)));
