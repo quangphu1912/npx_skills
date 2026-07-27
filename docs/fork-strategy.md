@@ -1,157 +1,108 @@
-# Fork Strategy: fork/custom-workflow vs upstream
+# Branch Strategy: `main` (ours) + `upstream-main` (mirror)
 
-## Branch Layout
+## Model
+
+`@phu-le/skills` is a **published fork** of [vercel-labs/skills](https://github.com/vercel-labs/skills). We publish our own scoped package, so `main` IS our product — not a pristine copy of upstream. Upstream is a remote we periodically **merge** enhancements from.
 
 ```
-upstream/main              ← vercel-labs/skills (read-only)
-    │
-    ▼
-origin/main                ← mirrors upstream/main exactly
-    │
-    ▼  rebase onto
-fork/custom-workflow       ← our work (never merge upstream, always rebase)
+vercel-labs/skills   (remote: `upstream`)
+        │  fetch + ff-only
+        ▼
+  upstream-main      ← LOCAL mirror, exact copy of vercel-labs/skills (read-only)
+        │  merge (when we want an enhancement)
+        ▼
+   main              ← OUR release line → publishes @phu-le/skills → origin/main
 ```
 
-**Rule:** `main` always tracks upstream. `fork/custom-workflow` rebases onto `main`. Never merge upstream into the fork branch.
+**Why merge, not rebase:** rebasing a published package rewrites history and forces `--force-with-lease` pushes that break `npm install` for anyone depending on a commit. Merge commits preserve history; no force-push, no rewrite. Rebase is the right tool for a private patch-set nobody else tracks — not a published package.
 
-## Files: Conflict Risk Assessment
+## Remotes & Branches
 
-### Fork-only files (zero conflict risk)
+| Remote | URL | Role |
+|--------|-----|------|
+| `origin` | `github.com/quangphu1912/npx_skills` | Our fork (push `main` here) |
+| `upstream` | `github.com/vercel-labs/skills` | The original (read-only source of enhancements) |
 
-These don't exist upstream — rebases will never touch them:
+| Branch | Tracks | Purpose |
+|--------|--------|---------|
+| `main` | `origin/main` | Our custom release line. `npm publish` runs from here. |
+| `upstream-main` | `upstream/main` | Exact mirror of vercel-labs/skills. Refresh with ff-only pull. |
+| `release` | — | Stale `v0.1.2` snapshot. Kept for history; not actively used. |
 
-- `src/import-skills.ts`
-- `src/distribute.ts`
-- `src/extract-claude-plugins.ts`
-- `src/sync-managed.ts`
-- `src/skill-intent.ts`
-- `src/stow.ts`
-- `src/list-agents.ts`
-- `docs/cheatsheet.md`
-- `docs/fork-strategy.md`
-- `docs/npx-skills-cheatsheet.md`
+## Daily: See How We Differ
 
-### Shared files (conflict risk)
+```bash
+git fetch upstream                                   # refresh remote-tracking refs
+git checkout upstream-main && git pull --ff-only     # update the local mirror
 
-Upstream modifies these regularly. Expect conflicts on every rebase:
+git log main..upstream-main                          # ← upstream enhancements we DON'T have yet
+git log upstream-main..main                          # ← our customizations over upstream
+git diff upstream-main...main                        # ← net change (our product vs original)
+```
 
-| File | Risk | Why |
-|------|------|-----|
-| `src/cli.ts` | **HIGH** | Both sides add commands, imports, lock code |
-| `src/skill-lock.ts` | **HIGH** | Version drift (v3 upstream vs v4 fork), new fields |
-| `src/agents.ts` | **MEDIUM** | Upstream adds new agents frequently |
-| `src/installer.ts` | **MEDIUM** | Fork added `distributeSkillToAgents`, upstream may refactor |
-| `src/remove.ts` | **MEDIUM** | Both sides modify dry-run and agent handling |
-| `src/add.ts` | **LOW** | Minor upstream changes |
-| `src/types.ts` | **LOW** | New agent type additions |
-| `src/telemetry.ts` | **LOW** | Event format changes |
+Review `main..upstream-main` to decide which upstream commits are worth merging (new agents we use, bug fixes in shared commands). Skip agent additions we don't use and features we've implemented differently — they're conflict churn for no value.
 
-## When to Sync
+## Sync: Pull Upstream Enhancements Into `main`
 
-### Sync when upstream releases:
-
-- New agent support we want (e.g., a new agent we use)
-- Bug fixes in shared commands (`add`, `remove`, `list`)
-- Security patches
-
-### Don't sync for:
-
-- Agent additions we don't use (low value, conflict churn)
-- Features we've already implemented differently (e.g., lock file, dry-run)
-- Cosmetic changes (README, help text)
-
-### Recommended cadence
-
-Every 2-4 weeks, or when a specific upstream commit is needed. Not every upstream commit is worth the rebase cost.
-
-## How to Rebase
-
-### Step 1: Fetch upstream
+### Step 1: Refresh the mirror
 
 ```bash
 git fetch upstream
+git checkout upstream-main
+git merge --ff-only upstream/main        # mirror must fast-forward; never commit onto it
+git push origin upstream-main            # keep the mirror on origin too (optional)
 ```
 
-### Step 2: Update main to match upstream
+If ff-only fails, upstream force-pushed. Inspect `git log upstream-main..upstream/main` before proceeding.
+
+### Step 2: Merge into main
 
 ```bash
 git checkout main
-git merge --ff-only upstream/main
-git push origin main
+git merge upstream-main
 ```
 
-If fast-forward fails, upstream force-pushed. Inspect `git log main..upstream/main` before proceeding.
+### Step 3: Resolve conflicts
 
-### Step 3: Rebase fork branch
+Shared files (high conflict risk):
+
+| File | Risk | Resolution |
+|------|------|------------|
+| `src/cli.ts` | **HIGH** | Keep our imports/commands/help; adopt new upstream commands and their imports |
+| `src/skill-lock.ts` | **HIGH** | Keep our schema; adopt upstream helper additions |
+| `src/agents.ts` | **MEDIUM** | Accept upstream's new agents; re-apply our removals (gemini-cli) and reclassifications (codex non-universal) |
+| `src/installer.ts` | **MEDIUM** | Keep our `distributeSkillToAgents`/`getAgentBaseDir`; adopt upstream refactors. **Watch for semantic conflicts** — main added a project-level skip-optimization (skips symlinking when the agent's config dir is absent); tests that assume symlink always runs (e.g. `installer-symlink-fallback.test.ts`) must pre-create the agent dir |
+| `src/remove.ts` | **MEDIUM** | Keep our `--dry-run`/intent integration; adopt upstream fixes |
+| `src/types.ts` | **LOW** | Merge new agent types into the `AgentType` union |
+| `src/telemetry.ts` | **LOW** | Event format drift |
+
+Fork-only files (`import-skills.ts`, `distribute.ts`, `extract-claude-plugins.ts`, `sync-managed.ts`, `skill-intent.ts`, `stow.ts`, `list-agents.ts`, `docs/*`) don't exist upstream — zero conflict risk.
+
+**General rule:** for each conflict, read both sides. Keep fork logic, adopt upstream infrastructure. Text-clean auto-merges can still be **semantic conflicts** — always run the full test suite after merging, not just `tsc`.
+
+### Step 4: Test
 
 ```bash
-git checkout fork/custom-workflow
-git rebase main
+npx vitest run                           # must be 456/456 green (the real gate)
+npx prettier --check <files-you-edited>  # format only what you touched
 ```
 
-### Step 4: Resolve conflicts
-
-Expected conflicts and resolution strategy:
-
-**`src/cli.ts`** — Keep our imports, commands, and help text. Pull in any new upstream command additions.
-
-**`src/skill-lock.ts`** — Keep our v4 schema. Pull in upstream helper functions if added.
-
-**`src/agents.ts`** — Accept upstream's agent list (they add new agents). Our changes are minimal here.
-
-**`src/installer.ts`** — Keep `distributeSkillToAgents`, `getAgentBaseDir`. Pull in upstream refactors to `installSkillForAgent` etc.
-
-**`src/remove.ts`** — Keep our `--dry-run` additions and intent integration. Pull in upstream fixes.
-
-**General rule:** For each conflict, read both sides. Keep fork logic, adopt upstream infrastructure.
-
-### Step 5: Test after rebase
+### Step 5: Push
 
 ```bash
-pnpm obuild                           # must pass
-skills agents                         # verify agent list loads
-skills extract-claude-plugins --dry-run
-skills distribute --dry-run -g -y
-skills update -g                      # verify lock file reads correctly
+git push origin main                     # normal push — no force needed (merge, not rebase)
 ```
 
-### Step 6: Force push
+## Sync Cadence
 
-```bash
-git push origin fork/custom-workflow --force-with-lease
-```
-
-`--force-with-lease` is safe — rejects if someone else pushed to the branch.
-
-## What Changed After Last Sync
-
-Last synced: before commit `83ac874` (fork/custom-workflow fork point from main).
-
-Upstream has 4 commits not yet merged:
-- `eec87fd` Update-README
-- `b3bceb6` respect local folders when doing project level update (#1079)
-- `f2c4b42` package-version-bump
-- `f406a4f` Add Hermes Agent support
-
-These touch 8 shared files. Low urgency — sync when convenient.
-
-## Merge vs Rebase Decision
-
-| Situation | Action |
-|-----------|--------|
-| Regular sync | Rebase onto main |
-| Long-lived PR from upstream | Cherry-pick specific commits |
-| Massive upstream refactor | Create new branch from main, re-apply fork changes |
-| Upstream force-push | Reset main to upstream, rebase fork |
+Every 2–4 weeks, or when a specific upstream commit is needed. Not every upstream commit is worth the merge cost. Currently `main` is **153 commits behind** `upstream-main` — sync selectively when an enhancement is worth integrating.
 
 ## Disaster Recovery
 
-If rebase goes badly:
-
 ```bash
-git rebase --abort                     # cancel the rebase
-git reflog                             # find pre-rebase commit
-git reset --hard <ref>                 # restore to before rebase
+git merge --abort                        # cancel a merge in progress
+git reflog                               # find a pre-merge state
+git reset --hard <ref>                   # restore main to before the merge
 ```
 
-The fork branch is also pushed to `origin` — `git fetch origin && git reset --hard origin/fork/custom-workflow` as a last resort.
+`origin/main` is the offsite backup — `git fetch origin && git reset --hard origin/main` as a last resort.
