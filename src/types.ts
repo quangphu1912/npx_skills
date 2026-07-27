@@ -23,7 +23,6 @@ export type AgentType =
   | 'droid'
   | 'firebender'
   | 'forgecode'
-  | 'gemini-cli'
   | 'github-copilot'
   | 'goose'
   | 'iflow-cli'
