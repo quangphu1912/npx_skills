@@ -1,18 +1,98 @@
-# skills
+# @phu-le/skills
 
-The CLI for the open agent skills ecosystem.
+> Fork of [vercel-labs/skills](https://github.com/vercel-labs/skills) with multi-agent sync, managed workflows, and plugin extraction.
+
+Moving from Claude Code to Cursor? Trying Codex? Don't leave your skills behind.
+
+`@phu-le/skills` lets you install skills from GitHub, import your Claude Code plugin skills, and distribute them to every AI agent you use.
+
+**No dotfiles or special setup required** — works out of the box with any of the 50+ supported agents.
+
+[![npm version](https://img.shields.io/npm/v/@phu-le/skills)](https://npmjs.com/package/@phu-le/skills)
+[![npm downloads](https://img.shields.io/npm/dw/@phu-le/skills)](https://npmjs.com/package/@phu-le/skills)
 
 <!-- agent-list:start -->
 Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [75 more](#supported-agents).
 <!-- agent-list:end -->
 
-<p>
-  <a href="https://vercel.com/labs#labs-products"><img alt="Vercel Labs Product" src="https://img.shields.io/badge/LABS-PRODUCT-0a0a0a.svg?style=for-the-badge&amp;logo=Vercel&amp;labelColor=000000" height="28"></a>
-  <a href="https://www.npmjs.com/package/skills"><img alt="npm version: skills" src="https://img.shields.io/npm/v/skills.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
-  <a href="https://github.com/vercel-labs/skills/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/vercel-labs/skills.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
-  <a href="https://www.npmjs.com/package/skills"><img alt="npm downloads per month: skills" src="https://img.shields.io/npm/dm/skills.svg?style=for-the-badge&amp;labelColor=000000&amp;label=npm%20downloads" height="28"></a>
-  <a href="https://skills.sh/vercel-labs/skills"><img alt="skills.sh" src="https://skills.sh/b/vercel-labs/skills?style=for-the-badge" height="28"></a>
-</p>
+## Quick Start
+
+```bash
+# Install a skill from GitHub
+npx @phu-le/skills add vercel-labs/agent-skills -g
+
+# See what's installed
+npx @phu-le/skills list -g
+
+# Keep skills up to date
+npx @phu-le/skills update
+```
+
+That's it. No dotfiles, no config files, no setup. Just works.
+
+## Workflows
+
+**Reference docs:**
+- [docs/npx-skills-cheatsheet.md](docs/npx-skills-cheatsheet.md) — Native `npx skills` command reference
+- [docs/cheatsheet.md](docs/cheatsheet.md) — Multi-agent sync workflow (import, distribute, extract)
+- [docs/fork-strategy.md](docs/fork-strategy.md) — Branch model and upstream sync (merge-based)
+- [AGENTS.md](AGENTS.md) — Architecture and development guide
+
+### Skill Consumer — Install from GitHub
+
+```bash
+npx skills add vercel-labs/agent-skills -g   # install globally
+npx skills list -g                            # see what's installed
+npx skills update                             # keep skills fresh
+npx skills remove my-skill -g                 # remove when done
+```
+
+### Multi-Agent Sync — Share Across All Your Agents
+
+Share skills across all your AI agents from a single canonical store (`~/.agents/skills/`):
+
+```bash
+skills agents                                  # see which agents are installed
+skills import ~/.claude/skills/standards-go -g # import a skill into canonical store
+skills extract-claude-plugins -y               # extract plugin skills from Claude Code
+skills distribute -g -y                        # fan out to all non-universal agents
+skills remove standards-go -g -y              # remove (source untouched, tracked in intent)
+```
+
+Universal agents (Cursor, OpenCode, Cline, GitHub Copilot, etc.) share `~/.agents/skills/` directly — no symlinks needed. Non-universal agents (Codex, Qwen, Kiro, KiloCode, Windsurf) get per-skill symlinks via `distribute`. Claude Code is excluded from distribute since it's typically the skill source.
+
+### Skill Author — Create Your Own
+
+```bash
+npx skills init my-skill                      # scaffold SKILL.md
+npx skills import ./my-skill -g              # symlink into canonical store
+npx skills distribute -g -y                  # fan out to all your agents
+```
+
+### Advanced: Dotfiles Integration
+
+For users with dotfiles repos managed via GNU Stow, you can auto-sync watched directories:
+
+```json
+// ~/.agents/.skill-config.json
+{ "stowManaged": true, "stowRepoPath": "~/dotfiles", "watchedDirs": ["~/dotfiles/skills"], "autoGit": true }
+```
+```bash
+npx skills managed-sync -g -y               # import new + distribute in one step
+```
+
+### Safety flags
+
+All destructive commands support `--dry-run` to preview changes without modifying the filesystem:
+```bash
+skills import ./my-skill -g --dry-run -y
+skills distribute -g --dry-run -y
+skills remove my-skill -g --dry-run -y
+skills extract-claude-plugins --dry-run
+skills managed-sync -g --dry-run -y
+```
+
+---
 
 ## Install a Skill
 
@@ -151,6 +231,11 @@ When installing interactively, you can choose:
 | `npx skills remove [skills]` | Remove installed skills from agents           |
 | `npx skills update [skills]` | Update installed skills to latest versions    |
 | `npx skills init [name]`     | Create a new SKILL.md template                |
+| `skills import <path> -g`    | Import skills into canonical store via symlink |
+| `skills distribute -g -y`    | Distribute canonical skills to all agents     |
+| `skills extract-claude-plugins -y` | Extract Claude Code plugin skills to canonical |
+| `skills agents`              | List all supported agents and install status  |
+| `skills managed-sync -g -y`  | Import + distribute in one step               |
 
 ### `skills list`
 
@@ -535,21 +620,11 @@ Ensure you have write access to the target directory.
 | Variable                  | Description                                                                |
 | ------------------------- | -------------------------------------------------------------------------- |
 | `INSTALL_INTERNAL_SKILLS` | Set to `1` or `true` to show and install skills marked as `internal: true` |
-| `DISABLE_TELEMETRY`       | Set to disable anonymous usage telemetry                                   |
-| `DO_NOT_TRACK`            | Alternative way to disable telemetry                                       |
-| `GITHUB_TOKEN`            | Optional explicit token for authenticated GitHub API requests              |
-| `GH_TOKEN`                | Fallback explicit token for authenticated GitHub API requests              |
 
 ```bash
 # Install internal skills
 INSTALL_INTERNAL_SKILLS=1 npx skills add vercel-labs/agent-skills --list
 ```
-
-## Telemetry
-
-This CLI collects anonymous usage data to help improve the tool. No personal information is collected.
-
-GitHub repository and skill identifiers are sent only for repositories that GitHub positively confirms are public. Other remote source types may include source and skill identifiers in install telemetry because their visibility cannot be checked through GitHub. Security-audit requests remain limited to confirmed-public GitHub repositories. Set `DISABLE_TELEMETRY=1` or `DO_NOT_TRACK=1` to disable both entirely.
 
 ## Related Links
 

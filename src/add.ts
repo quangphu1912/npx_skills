@@ -42,12 +42,15 @@ import {
 import { downloadSource } from './download-source.ts';
 import {
   addSkillToLock,
+  fetchSkillFolderHash,
   getGitHubToken,
+} from './skill-lock.ts';
+import {
   isPromptDismissed,
   dismissPrompt,
   getLastSelectedAgents,
   saveSelectedAgents,
-} from './skill-lock.ts';
+} from './skill-intent.ts';
 import { addSkillToLocalLock, computeSkillFolderHash } from './local-lock.ts';
 import type { Skill, AgentType } from './types.ts';
 import {
@@ -1011,8 +1014,10 @@ async function handleWellKnownSkills(
             sourceBaseUrl: url,
             wellKnownDigest: computeWellKnownSkillDigest(skill),
           });
-        } catch {
-          // Don't fail installation if lock file update fails
+        } catch (err: unknown) {
+          p.log.warn(
+            `Lock file update failed: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     }
@@ -1039,8 +1044,10 @@ async function handleWellKnownSkills(
               cwd
             );
           }
-        } catch {
-          // Don't fail installation if lock file update fails
+        } catch (err: unknown) {
+          p.log.warn(
+            `Local lock file update failed: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     }
@@ -2131,8 +2138,10 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
               skillFolderHash,
               pluginName: skill.pluginName,
             });
-          } catch {
-            // Don't fail installation if lock file update fails
+          } catch (err: unknown) {
+            p.log.warn(
+              `Lock file update failed: ${err instanceof Error ? err.message : String(err)}`
+            );
           }
         }
       }
@@ -2169,8 +2178,10 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
               },
               cwd
             );
-          } catch {
-            // Don't fail installation if lock file update fails
+          } catch (err: unknown) {
+            p.log.warn(
+              `Local lock file update failed: ${err instanceof Error ? err.message : String(err)}`
+            );
           }
         }
       }

@@ -8,6 +8,7 @@ import { detectAgent } from './detect-agent.ts';
 import { removeSkillFromLock, getSkillFromLock, readSkillLock } from './skill-lock.ts';
 import { readLocalLock, removeSkillFromLocalLock } from './local-lock.ts';
 import { hasSkillMd } from './skills.ts';
+import { addToRemoved } from './skill-intent.ts';
 import type { AgentType } from './types.ts';
 import {
   getInstallPath,
@@ -22,6 +23,7 @@ export interface RemoveOptions {
   agent?: string[];
   yes?: boolean;
   all?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -92,6 +94,11 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
   const isGlobal = options.global ?? false;
   const cwd = process.cwd();
+  const dryRun = options.dryRun ?? false;
+
+  if (dryRun) {
+    p.log.warn(pc.yellow('[dry-run] No filesystem changes will be made'));
+  }
 
   const spinner = p.spinner();
 
@@ -216,7 +223,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
     spinner.stop(`Targeting ${targetAgents.length} potential agent(s)`);
   }
 
-  if (!options.yes) {
+  if (!options.yes && !dryRun) {
     console.log();
     p.log.info('Skills to remove:');
     for (const skill of selectedSkills) {
@@ -234,7 +241,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
     }
   }
 
-  spinner.start('Removing skills…');
+  spinner.start(dryRun ? 'Calculating removals...' : 'Removing skills...');
 
   const results: {
     skill: string;
@@ -277,7 +284,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
           try {
             const stats = await lstat(pathToCleanup).catch(() => null);
-            if (stats) {
+            if (stats && !dryRun) {
               await rm(pathToCleanup, { recursive: true, force: true });
             }
           } catch (err) {
@@ -292,21 +299,39 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
       // Only remove the canonical path if no other installed agents are using it.
       // This prevents breaking other agents when uninstalling from a specific agent (#287).
-      const installedAgents = await detectInstalledAgents();
-      const remainingAgents = installedAgents.filter((a) => !targetAgents.includes(a));
+      // The canonical store is only touched on a full remove (no --agent filter); an
+      // agent-specific remove leaves the master copy intact for the remaining agents.
+      const isFullRemove = !options.agent || options.agent.length === 0;
 
-      let isStillUsed = false;
-      for (const agentKey of remainingAgents) {
-        const path = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
-        const exists = await lstat(path).catch(() => null);
-        if (exists) {
-          isStillUsed = true;
-          break;
+      let canonicalDeleted = false;
+      if (isFullRemove) {
+        const installedAgents = await detectInstalledAgents();
+        const remainingAgents = installedAgents.filter((a) => !targetAgents.includes(a));
+
+        let isStillUsed = false;
+        for (const agentKey of remainingAgents) {
+          const path = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
+          const exists = await lstat(path).catch(() => null);
+          if (exists) {
+            isStillUsed = true;
+            break;
+          }
         }
-      }
 
-      if (!isStillUsed) {
-        await rm(canonicalPath, { recursive: true, force: true });
+        if (!isStillUsed) {
+          const canonicalStat = await lstat(canonicalPath).catch(() => null);
+          if (canonicalStat?.isSymbolicLink()) {
+            if (!dryRun) {
+              await rm(canonicalPath, { force: true });
+            }
+            canonicalDeleted = true;
+          } else if (canonicalStat?.isDirectory()) {
+            if (!dryRun) {
+              await rm(canonicalPath, { recursive: true, force: true });
+            }
+            canonicalDeleted = true;
+          }
+        }
       }
 
       let effectiveSource = 'local';
@@ -321,6 +346,9 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         effectiveSourceType = lockEntry?.sourceType || 'local';
         if (!isStillUsed) {
           await removeSkillFromLock(skillName);
+          if (canonicalDeleted) {
+            await addToRemoved(skillName, effectiveSource);
+          }
         }
       } else {
         const localLock = await readLocalLock(cwd);
@@ -329,6 +357,9 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         effectiveSourceType = lockEntry?.sourceType || 'local';
         if (!isStillUsed) {
           await removeSkillFromLocalLock(skillName, cwd);
+          if (canonicalDeleted) {
+            await addToRemoved(skillName, effectiveSource);
+          }
         }
       }
 
@@ -347,13 +378,13 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
     }
   }
 
-  spinner.stop('Removal process complete');
+  spinner.stop(dryRun ? 'Calculation complete' : 'Removal process complete');
 
   const successful = results.filter((r) => r.success);
   const failed = results.filter((r) => !r.success);
 
   // Track removal (grouped by source)
-  if (successful.length > 0) {
+  if (!dryRun && successful.length > 0) {
     const bySource = new Map<string, { skills: string[]; sourceType?: string }>();
 
     for (const r of successful) {
@@ -379,7 +410,8 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
   }
 
   if (successful.length > 0) {
-    p.log.success(pc.green(`Successfully removed ${successful.length} skill(s)`));
+    const prefix = dryRun ? pc.yellow(`[dry-run] Would remove`) : pc.green(`Successfully removed`);
+    p.log.success(`${prefix} ${successful.length} skill(s)`);
   }
 
   if (failed.length > 0) {
@@ -390,7 +422,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
   }
 
   console.log();
-  p.outro(pc.green('Done!'));
+  p.outro(pc.green(dryRun ? 'Dry run complete — no changes made.' : 'Done!'));
 }
 
 /**
@@ -424,6 +456,8 @@ export function parseRemoveOptions(args: string[]): { skills: string[]; options:
         nextArg = args[i];
       }
       i--; // Back up one since the loop will increment
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
     } else if (arg === '-a' || arg === '--agent') {
       options.agent = options.agent || [];
       i++;

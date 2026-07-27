@@ -262,7 +262,7 @@ description: ${description}
       writeFileSync(
         join(lockDir, '.skill-lock.json'),
         JSON.stringify({
-          version: 3,
+          version: 4,
           skills: {
             'ce:review': {
               source: 'everyinc/compound-engineering-plugin',

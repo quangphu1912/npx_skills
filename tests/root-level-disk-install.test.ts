@@ -64,7 +64,7 @@ vi.mock('../src/detect-agent.ts', () => ({
 }));
 
 // NOTE: do NOT mock ../src/agents.ts. installer.installSkillForAgent relies on the
-// real `agents` map (e.g. codex.skillsDir / globalSkillsDir); a stubbed map with only
+// real `agents` map (e.g. opencode.skillsDir / globalSkillsDir); a stubbed map with only
 // `displayName` makes getAgentBaseDir() do join(baseDir, undefined) and throws
 // "The \"path\" argument must be of type string. Received undefined". We pass
 // `agent: ['codex']` to runAdd so the detectInstalledAgents() branch is skipped anyway.
@@ -137,7 +137,7 @@ describe('root-level disk install (issue #1603)', () => {
     // supporting files before the fix (see issue #1603).
     await runAdd(['someowner/somerepo'], {
       yes: true,
-      agent: ['codex'],
+      agent: ['opencode'],
       global: false,
       mode: 'copy',
     });
