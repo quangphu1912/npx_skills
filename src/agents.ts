@@ -143,7 +143,7 @@ export const agents: Record<AgentType, AgentConfig> = {
   codex: {
     name: 'codex',
     displayName: 'Codex',
-    skillsDir: '.agents/skills',
+    skillsDir: '.codex/skills',
     globalSkillsDir: join(codexHome, 'skills'),
     detectInstalled: async () => {
       return existsSync(codexHome) || existsSync('/etc/codex');
@@ -248,15 +248,8 @@ export const agents: Record<AgentType, AgentConfig> = {
       return existsSync(join(home, '.forge'));
     },
   },
-  'gemini-cli': {
-    name: 'gemini-cli',
-    displayName: 'Gemini CLI',
-    skillsDir: '.agents/skills',
-    globalSkillsDir: join(home, '.gemini/skills'),
-    detectInstalled: async () => {
-      return existsSync(join(home, '.gemini'));
-    },
-  },
+  // 'gemini-cli' removed 2026-07-27: Google deprecated consumer sign-in
+  // (2026-06-18); the tool is unusable and no longer tracked.
   'github-copilot': {
     name: 'github-copilot',
     displayName: 'GitHub Copilot',

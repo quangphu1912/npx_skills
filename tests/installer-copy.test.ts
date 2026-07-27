@@ -28,7 +28,7 @@ describe('installer copy mode', () => {
     try {
       const result = await installSkillForAgent(
         { name: skillName, description: 'test', path: skillDir },
-        'codex',
+        'github-copilot',
         { cwd: projectDir, mode: 'copy', global: false }
       );
 

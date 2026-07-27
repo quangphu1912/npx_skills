@@ -2,7 +2,7 @@ name: Publish
 
 on:
   push:
-    branches: [main]
+    branches: [release]
     tags:
       - 'v*'
     paths-ignore:
@@ -95,13 +95,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Reset generated files
-        if: steps.version.outputs.bump != 'none' && steps.version.outputs.bump != 'skip'
-        run: |
-          # Reset any changes to generated files (e.g., ThirdPartyNoticeText.txt)
-          # that may differ between local and CI builds
-          git checkout -- ThirdPartyNoticeText.txt || true
 
       - name: Bump version
         if: steps.version.outputs.bump != 'none' && steps.version.outputs.bump != 'skip'

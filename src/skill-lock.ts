@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 
 const AGENTS_DIR = '.agents';
 const LOCK_FILE = '.skill-lock.json';
-const CURRENT_VERSION = 3; // Bumped from 2 to 3 for folder hash support (GitHub tree SHA)
+const CURRENT_VERSION = 4; // Bumped from 3: intent fields (removed/dismissed/lastSelectedAgents) moved to .skill-intent.json
 
 /**
  * Represents a single installed skill entry in the lock file.
@@ -34,33 +34,24 @@ export interface SkillLockEntry {
   updatedAt: string;
   /** Name of the plugin this skill belongs to (if any) */
   pluginName?: string;
-}
-
-/**
- * Tracks dismissed prompts so they're not shown again.
- */
-export interface DismissedPrompts {
-  /** Dismissed the find-skills skill installation prompt */
-  findSkillsPrompt?: boolean;
+  /** Version of the plugin at extraction time (for staleness detection) */
+  pluginVersion?: string;
 }
 
 /**
  * The structure of the skill lock file.
+ * Contains only installation state — user intent lives in .skill-intent.json.
  */
 export interface SkillLockFile {
   /** Schema version for future migrations */
   version: number;
   /** Map of skill name to its lock entry */
   skills: Record<string, SkillLockEntry>;
-  /** Tracks dismissed prompts */
-  dismissed?: DismissedPrompts;
-  /** Last selected agents for installation */
-  lastSelectedAgents?: string[];
 }
 
 /**
  * Get the path to the global skill lock file.
- * Use $XDG_STATE_HOME/skills/.skill-lock.json if set.
+ * Use $XDG_STATE_HOME/skills/.skill-lock.json if set,
  * otherwise fall back to ~/.agents/.skill-lock.json
  */
 export function getSkillLockPath(): string {
@@ -74,7 +65,8 @@ export function getSkillLockPath(): string {
 /**
  * Read the skill lock file.
  * Returns an empty lock file structure if the file doesn't exist.
- * Wipes the lock file if it's an old format (version < CURRENT_VERSION).
+ * Wipes the skills map if the schema version is old (intent fields are preserved
+ * separately in .skill-intent.json and are not affected by this wipe).
  */
 export async function readSkillLock(): Promise<SkillLockFile> {
   const lockPath = getSkillLockPath();
@@ -83,20 +75,28 @@ export async function readSkillLock(): Promise<SkillLockFile> {
     const content = await readFile(lockPath, 'utf-8');
     const parsed = JSON.parse(content) as SkillLockFile;
 
-    // Validate version - wipe if old format
     if (typeof parsed.version !== 'number' || !parsed.skills) {
       return createEmptyLockFile();
     }
 
-    // If old version, wipe and start fresh (backwards incompatible change)
-    // v3 adds skillFolderHash - we want fresh installs to populate it
     if (parsed.version < CURRENT_VERSION) {
+      const backupPath = `${lockPath}.v${parsed.version}.bak`;
+      try {
+        await writeFile(backupPath, content, 'utf-8');
+      } catch (backupErr) {
+        console.warn(
+          `⚠ Skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backup failed (${backupErr instanceof Error ? backupErr.message : String(backupErr)}). Run 'npx skills update' to repopulate.`
+        );
+        return createEmptyLockFile();
+      }
+      console.warn(
+        `⚠ Skills lock file upgraded from v${parsed.version} → v${CURRENT_VERSION}. Backed up to ${backupPath}. Run 'npx skills update' to repopulate.`
+      );
       return createEmptyLockFile();
     }
 
     return parsed;
-  } catch (error) {
-    // File doesn't exist or is invalid - return empty
+  } catch {
     return createEmptyLockFile();
   }
 }
@@ -107,13 +107,8 @@ export async function readSkillLock(): Promise<SkillLockFile> {
  */
 export async function writeSkillLock(lock: SkillLockFile): Promise<void> {
   const lockPath = getSkillLockPath();
-
-  // Ensure directory exists
   await mkdir(dirname(lockPath), { recursive: true });
-
-  // Write with pretty formatting for human readability
-  const content = JSON.stringify(lock, null, 2);
-  await writeFile(lockPath, content, 'utf-8');
+  await writeFile(lockPath, JSON.stringify(lock, null, 2), 'utf-8');
 }
 
 /**
@@ -133,7 +128,6 @@ export function computeContentHash(content: string): string {
  * @returns The token string or null if not available
  */
 export function getGitHubToken(): string | null {
-  // Check environment variables first
   if (process.env.GITHUB_TOKEN) {
     return process.env.GITHUB_TOKEN;
   }
@@ -141,7 +135,6 @@ export function getGitHubToken(): string | null {
     return process.env.GH_TOKEN;
   }
 
-  // Try gh CLI
   try {
     const token = execSync('gh auth token', {
       encoding: 'utf-8',
@@ -189,15 +182,12 @@ export async function addSkillToLock(
 ): Promise<void> {
   const lock = await readSkillLock();
   const now = new Date().toISOString();
-
   const existingEntry = lock.skills[skillName];
-
   lock.skills[skillName] = {
     ...entry,
     installedAt: existingEntry?.installedAt ?? now,
     updatedAt: now,
   };
-
   await writeSkillLock(lock);
 }
 
@@ -206,11 +196,9 @@ export async function addSkillToLock(
  */
 export async function removeSkillFromLock(skillName: string): Promise<boolean> {
   const lock = await readSkillLock();
-
   if (!(skillName in lock.skills)) {
     return false;
   }
-
   delete lock.skills[skillName];
   await writeSkillLock(lock);
   return true;
@@ -253,50 +241,6 @@ export async function getSkillsBySource(): Promise<
   return bySource;
 }
 
-/**
- * Create an empty lock file structure.
- */
 function createEmptyLockFile(): SkillLockFile {
-  return {
-    version: CURRENT_VERSION,
-    skills: {},
-    dismissed: {},
-  };
-}
-
-/**
- * Check if a prompt has been dismissed.
- */
-export async function isPromptDismissed(promptKey: keyof DismissedPrompts): Promise<boolean> {
-  const lock = await readSkillLock();
-  return lock.dismissed?.[promptKey] === true;
-}
-
-/**
- * Mark a prompt as dismissed.
- */
-export async function dismissPrompt(promptKey: keyof DismissedPrompts): Promise<void> {
-  const lock = await readSkillLock();
-  if (!lock.dismissed) {
-    lock.dismissed = {};
-  }
-  lock.dismissed[promptKey] = true;
-  await writeSkillLock(lock);
-}
-
-/**
- * Get the last selected agents.
- */
-export async function getLastSelectedAgents(): Promise<string[] | undefined> {
-  const lock = await readSkillLock();
-  return lock.lastSelectedAgents;
-}
-
-/**
- * Save the selected agents to the lock file.
- */
-export async function saveSelectedAgents(agents: string[]): Promise<void> {
-  const lock = await readSkillLock();
-  lock.lastSelectedAgents = agents;
-  await writeSkillLock(lock);
+  return { version: CURRENT_VERSION, skills: {} };
 }

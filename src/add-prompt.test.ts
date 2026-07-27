@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { promptForAgents } from './add.js';
-import * as skillLock from './skill-lock.js';
+import * as skillIntent from './skill-intent.js';
 import * as searchMultiselectModule from './prompts/search-multiselect.js';
 
 // Mock dependencies
-vi.mock('./skill-lock.js');
+vi.mock('./skill-intent.js');
 vi.mock('./prompts/search-multiselect.js');
 vi.mock('./telemetry.js', () => ({
   setVersion: vi.fn(),
@@ -27,7 +27,7 @@ describe('promptForAgents', () => {
   });
 
   it('should use default agents (claude-code, opencode, codex) when no history exists', async () => {
-    vi.mocked(skillLock.getLastSelectedAgents).mockResolvedValue(undefined);
+    vi.mocked(skillIntent.getLastSelectedAgents).mockResolvedValue(undefined);
     vi.mocked(searchMultiselectModule.searchMultiselect).mockResolvedValue(['opencode']);
 
     await promptForAgents('Select agents', choices);
@@ -41,7 +41,7 @@ describe('promptForAgents', () => {
   });
 
   it('should use last selected agents when history exists', async () => {
-    vi.mocked(skillLock.getLastSelectedAgents).mockResolvedValue(['cursor']);
+    vi.mocked(skillIntent.getLastSelectedAgents).mockResolvedValue(['cursor']);
     vi.mocked(searchMultiselectModule.searchMultiselect).mockResolvedValue(['cursor']);
 
     await promptForAgents('Select agents', choices);
@@ -54,7 +54,7 @@ describe('promptForAgents', () => {
   });
 
   it('should filter out invalid agents from history', async () => {
-    vi.mocked(skillLock.getLastSelectedAgents).mockResolvedValue(['cursor', 'invalid-agent']);
+    vi.mocked(skillIntent.getLastSelectedAgents).mockResolvedValue(['cursor', 'invalid-agent']);
     vi.mocked(searchMultiselectModule.searchMultiselect).mockResolvedValue(['cursor']);
 
     await promptForAgents('Select agents', choices);
@@ -67,7 +67,7 @@ describe('promptForAgents', () => {
   });
 
   it('should use default agents if all history agents are invalid', async () => {
-    vi.mocked(skillLock.getLastSelectedAgents).mockResolvedValue(['invalid-agent']);
+    vi.mocked(skillIntent.getLastSelectedAgents).mockResolvedValue(['invalid-agent']);
     vi.mocked(searchMultiselectModule.searchMultiselect).mockResolvedValue(['opencode']);
 
     await promptForAgents('Select agents', choices);
@@ -82,22 +82,22 @@ describe('promptForAgents', () => {
   });
 
   it('should save selected agents if not cancelled', async () => {
-    vi.mocked(skillLock.getLastSelectedAgents).mockResolvedValue(undefined);
+    vi.mocked(skillIntent.getLastSelectedAgents).mockResolvedValue(undefined);
     vi.mocked(searchMultiselectModule.searchMultiselect).mockResolvedValue(['opencode']);
 
     await promptForAgents('Select agents', choices);
 
-    expect(skillLock.saveSelectedAgents).toHaveBeenCalledWith(['opencode']);
+    expect(skillIntent.saveSelectedAgents).toHaveBeenCalledWith(['opencode']);
   });
 
   it('should not save agents if cancelled', async () => {
-    vi.mocked(skillLock.getLastSelectedAgents).mockResolvedValue(undefined);
+    vi.mocked(skillIntent.getLastSelectedAgents).mockResolvedValue(undefined);
     vi.mocked(searchMultiselectModule.searchMultiselect).mockResolvedValue(
       searchMultiselectModule.cancelSymbol
     );
 
     await promptForAgents('Select agents', choices);
 
-    expect(skillLock.saveSelectedAgents).not.toHaveBeenCalled();
+    expect(skillIntent.saveSelectedAgents).not.toHaveBeenCalled();
   });
 });
