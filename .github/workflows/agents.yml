@@ -8,6 +8,9 @@ on:
     branches: [main]
     paths:
       - "src/agents.ts"
+  # Manual trigger: this workflow otherwise only runs when src/agents.ts changes,
+  # which makes the sync-agents push path hard to verify or re-run on demand.
+  workflow_dispatch:
 
 concurrency:
   group: agents-${{ github.ref }}
@@ -37,7 +40,9 @@ jobs:
 
   sync-agents:
     needs: validate-agents
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Required: this job pushes the regenerated README/package.json back to main.
     # Without it GITHUB_TOKEN is read-only and `git push` fails with a 403.
