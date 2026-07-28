@@ -122,6 +122,27 @@ Two fork-specific deviations from upstream's registry — keep these through reb
 
 Lock file wipes on version mismatch (v3 → v4 loses upstream `skills add` tracking). Accepted tradeoff.
 
+### Removal Semantics — `remove` deletes the master, on purpose
+
+`remove` deletes the skill from the Claude master (`~/.claude/skills/<name>`, typically
+a stow symlink into a dotfiles repo) in addition to the hub and every agent symlink.
+
+**This is intended, not a bug.** The master is the authoring source, and `managed-sync`
+imports *from* it — so a removal that spared the master would be undone by the very next
+sync. Deleting it is the only removal that sticks. It is git-recoverable
+(`git checkout -- .claude/skills/`) precisely because the master is version-controlled.
+
+Do not "fix" this by making `remove` preserve `~/.claude/skills/<name>`. That reintroduces
+skills on the next `managed-sync` and leaves the hub fighting the master.
+
+One consequence worth knowing: `scanDir()` in `remove.ts` counts only `entry.isDirectory()`,
+which is **false for symlinks** — and this fork's hub and agent dirs are entirely symlinks.
+Disk scanning alone therefore finds nothing here; removal works because requests are also
+resolved against lock keys (`resolveSkillsToRemove`). Before that resolution existed,
+`remove <name> -g` was a silent no-op for every imported skill.
+
+`remove` fans out to all agents itself, so no separate `distribute` is needed afterwards.
+
 ### Atomic Symlink Replacement
 
 `distributeSkillToAgents()` uses `symlink(tmp)` + `rename()` on POSIX for atomic symlink updates. Windows falls back to non-atomic rm + symlink.
