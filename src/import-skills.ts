@@ -81,7 +81,7 @@ export async function runImport(paths: string[], options: ImportOptions): Promis
     }
     const skillName =
       options.name && expandedPaths.length === 1
-        ? options.name
+        ? sanitizeName(options.name)
         : sanitizeName(basename(absolutePath));
     const targetDir = join(canonicalDir, skillName);
 
