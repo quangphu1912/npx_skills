@@ -4,7 +4,7 @@ name: Publish
 #
 # There is no branch trigger: under the rebase fork model (docs/fork-strategy.md)
 # `main` is force-pushed on every upstream sync, so a branch trigger would fire on
-# each one. The tag pattern is `skills-v*` rather than `v*` because upstream's 41
+# each one. The tag pattern is `skills-v*` rather than `v*` because upstream's 39
 # `v1.x` tags are ancestors of our history and share that namespace.
 on:
   push:
