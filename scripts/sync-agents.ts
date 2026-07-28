@@ -77,7 +77,7 @@ function generateSkillDiscoveryPaths(): string {
   return [...standardPaths, ...agentPaths].join('\n');
 }
 
-function generateKeywords(): string[] {
+export function generateKeywords(): string[] {
   const baseKeywords = ['cli', 'agent-skills', 'skills', 'ai-agents'];
   const agentKeywords = Object.keys(agents);
   // Fork-specific discovery keywords. They are not derived from the agent
