@@ -115,6 +115,20 @@ Two fork-specific deviations from upstream's registry — keep these through reb
 - **Codex is non-universal here.** Its binary reads `_codex_home()/skills` (`~/.codex/skills`), not the hub, so `skillsDir` is `.codex/skills` and `distribute` must symlink into it. Upstream classes it universal, which silently gave Codex zero hub skills.
 - **`gemini-cli` is removed.** Google deprecated consumer sign-in on 2026-06-18. It is gone from `AgentType`, so any upstream code referencing it (e.g. `detect-agent.ts`'s agent map) must be remapped to `universal` on rebase.
 
+**Do not reclassify Antigravity the way Codex was reclassified.** It looks like the same
+bug — classed universal (`.agents/skills`) while `globalSkillsDir` points at
+`~/.gemini/antigravity/skills` — but the two cases differ. Codex genuinely reads
+`_codex_home()/skills`, so reclassifying delivered skills to it. Antigravity has **no skill
+system at all** (verified 2026-07-26 by inspecting `app.asar`: zero `skill` strings), so
+its `globalSkillsDir` is fictional. Leaving it universal means `distribute` skips it, which
+is the correct outcome; reclassifying would only scatter symlinks into a directory nothing
+reads.
+
+`isUniversalAgent()` keys solely on `skillsDir === '.agents/skills'`, so a
+`skillsDir`/`globalSkillsDir` mismatch is a *signal to verify the tool*, never on its own a
+bug. Ten agents currently show that mismatch; most (Cursor, OpenCode) genuinely read the
+hub. Verify against the tool's binary before changing a classification.
+
 ### Intent/Lock Split
 
 - **Lock file** (`~/.agents/.skill-lock.json`, v4): Installation state only — what's installed, source, version
