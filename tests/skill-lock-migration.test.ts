@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile, readFile, access, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -100,8 +100,6 @@ describe('skill-lock migration', () => {
 
   it('returns empty lock and warns "Backup failed" when backup write throws', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'skill-lock-migration-'));
-    // Make the skills dir read-only so writing the .bak file fails,
-    // while the lock file itself was already written before the chmod.
     const skillsDir = join(tmpDir, 'skills');
     try {
       await mkdir(skillsDir, { recursive: true });
@@ -110,8 +108,11 @@ describe('skill-lock migration', () => {
       const oldVersion = SKILL_LOCK_CURRENT_VERSION - 1;
       await writeFile(lockPath, makeSkillLockContent(oldVersion), 'utf-8');
 
-      // Lock the directory so new files (the .bak) cannot be created
-      await chmod(skillsDir, 0o555);
+      // Force the backup write to fail by occupying its exact path with a
+      // directory — writeFile then fails with EISDIR. Deliberately not chmod:
+      // chmod on a directory is a no-op on Windows, so the backup would succeed
+      // there and this test would assert against the success message instead.
+      await mkdir(`${lockPath}.v${oldVersion}.bak`, { recursive: true });
 
       process.env.XDG_STATE_HOME = tmpDir;
 
@@ -128,8 +129,6 @@ describe('skill-lock migration', () => {
       expect(warnSpy).toHaveBeenCalledOnce();
       expect(warnSpy.mock.calls[0]![0]).toContain('Backup failed');
     } finally {
-      // Restore write permission before cleanup so rm can delete the directory
-      await chmod(skillsDir, 0o755).catch(() => {});
       await rm(tmpDir, { recursive: true, force: true });
     }
   });
