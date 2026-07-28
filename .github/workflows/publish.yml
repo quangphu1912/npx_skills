@@ -1,12 +1,15 @@
 name: Publish
 
+# Releases are cut from `skills-v*` tags only.
+#
+# There is no branch trigger: under the rebase fork model (docs/fork-strategy.md)
+# `main` is force-pushed on every upstream sync, so a branch trigger would fire on
+# each one. The tag pattern is `skills-v*` rather than `v*` because upstream's 41
+# `v1.x` tags are ancestors of our history and share that namespace.
 on:
   push:
-    branches: [release]
     tags:
-      - 'v*'
-    paths-ignore:
-      - '**/*.md'
+      - 'skills-v*'
   workflow_dispatch:
     inputs:
       bump:
@@ -51,7 +54,7 @@ jobs:
         id: version
         run: |
           # If tag push, skip version bump (already versioned)
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          if [[ "${{ github.ref }}" == refs/tags/skills-v* ]]; then
             echo "bump=skip" >> $GITHUB_OUTPUT
             echo "Tag push - skipping version bump, will publish directly"
             exit 0
@@ -64,31 +67,13 @@ jobs:
             exit 0
           fi
 
-          # Get the latest version tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-          if [ -z "$LATEST_TAG" ]; then
-            # No tags found, use all commits
-            COMMITS=$(git log --format=%s)
-          else
-            # Get commits since the latest tag
-            COMMITS=$(git log ${LATEST_TAG}..HEAD --format=%s)
-          fi
-
-          echo "Commits since last tag:"
-          echo "$COMMITS"
-
-          # Check for explicit version bump markers
-          if echo "$COMMITS" | grep -q "\[minor\]"; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
-            echo "Found [minor] - will bump minor version"
-          elif echo "$COMMITS" | grep -q "\[patch\]"; then
-            echo "bump=patch" >> $GITHUB_OUTPUT
-            echo "Found [patch] - will bump patch version"
-          else
-            echo "bump=none" >> $GITHUB_OUTPUT
-            echo "No version marker found - skipping release"
-          fi
+          # Unreachable: the only triggers are a skills-v* tag push and
+          # workflow_dispatch, both handled above. The previous commit-marker scan
+          # ([patch]/[minor]) lived here for the removed `release` branch trigger;
+          # it is gone because on this fork it would have scanned all of upstream's
+          # history for those markers and matched their commits, not ours.
+          echo "bump=none" >> $GITHUB_OUTPUT
+          echo "Unrecognized trigger - not releasing"
 
       - name: Configure git
         if: steps.version.outputs.bump != 'none' && steps.version.outputs.bump != 'skip'
@@ -119,28 +104,29 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
 
-          # Get changelog from merged PRs since last tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LATEST_TAG" ]; then
-            SINCE=""
+          # Changelog comes from git log, not `gh pr list`: this fork rebases its
+          # patch onto upstream and merges no PRs of its own, so a PR-based
+          # changelog is always empty. --match keeps upstream's v1.x tags out.
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'skills-v*' HEAD^ 2>/dev/null || echo "")
+
+          if [ -n "$LATEST_TAG" ]; then
+            CHANGELOG=$(git log "${LATEST_TAG}..HEAD" --format='- %s' --no-merges)
+          elif git rev-parse --verify -q origin/upstream-main >/dev/null; then
+            # No release tag on this history line. Happens on the first release
+            # after an upstream realign, which rewrites main and orphans older
+            # tags. Describe our patch (what this fork adds) rather than walking
+            # into upstream's history and reporting their commits as ours.
+            CHANGELOG=$(git log origin/upstream-main..HEAD --format='- %s' --no-merges)
           else
-            SINCE=$(git log -1 --format=%cI ${LATEST_TAG})
+            CHANGELOG=$(git log -1 --format='- %s')
           fi
 
-          # Fetch merged PRs and format as changelog
-          if [ -z "$SINCE" ]; then
-            PRS=$(gh pr list --state merged --json number,title,author --limit 100)
-          else
-            PRS=$(gh pr list --state merged --search "merged:>=${SINCE}" --json number,title,author --limit 100)
-          fi
-
-          CHANGELOG=$(echo "$PRS" | jq -r '.[] | "- \(.title) (#\(.number))"')
-          CONTRIBUTORS=$(echo "$PRS" | jq -r '.[].author.login' | sort -u | sed 's/^/@/' | paste -sd ', ' -)
+          [ -z "$CHANGELOG" ] && CHANGELOG="- No changes recorded since ${LATEST_TAG:-the last upstream realign}"
 
           # Generate release notes from template
-          export VERSION CHANGELOG CONTRIBUTORS
+          export VERSION CHANGELOG
           envsubst < .github/RELEASE_TEMPLATE.md > release-notes.md
 
-          gh release create "v${VERSION}" --notes-file release-notes.md
+          gh release create "skills-v${VERSION}" --notes-file release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

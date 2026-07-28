@@ -74,21 +74,110 @@ Git replays our patch commits on top of the new `upstream-main`. Conflicts arise
 | `src/skill-lock.ts` | v4 schema + backup-on-migration | Keep `CURRENT_VERSION=4` + backup; adopt upstream's gh-token warning |
 | `src/installer.ts` | distribute wiring | Keep `distributeSkillToAgents`/`getAgentBaseDir`; adopt upstream refactors |
 | `src/telemetry.ts` | no-op stubs | Keep no-ops; add stubs for any new exports upstream calls (e.g. `setDetectedAgent`) |
+| `src/types.ts` | `gemini-cli` removed from `AgentType` | Keep it removed. Upstream code that references it must be remapped, not revived — see below |
+| `src/detect-agent.ts` | none (pure upstream file) | Upstream's agent map hard-codes `gemini: 'gemini-cli'`, an agent we deleted. Remap to `'universal'`, matching the `devin` entry already in that map |
 
 New-feature files (distribute/import/extract/sync-managed/stow/list-agents/skill-intent + docs) don't exist upstream → zero conflict.
+
+### Lines that are easy to lose
+
+A rebase can drop a single added line inside an otherwise-upstream block without any
+conflict marker. Both of these were silently lost in the v1.5.20 realign and only
+surfaced via `pnpm type-check`:
+
+- `SkillLockEntry.pluginVersion` in `src/skill-lock.ts` — our field, used by
+  `extract-claude-plugins` for staleness detection.
+- `setDetectedAgent` in `src/telemetry.ts` — the stub upstream's `detect-agent.ts` imports.
+
+**`pnpm type-check` is the detector for this class of loss. Treat it as the gate,
+not the test suite** — the tests passed while all four type errors were live.
 
 ### Step 4: Test
 
 ```bash
-npx vitest run                           # target: all green (see "known env failures" below)
-npx tsc --noEmit 2>&1 | grep -E 'src/(cli|remove|skill-lock|installer|telemetry)\.ts'  # no new errors in our files
+pnpm type-check                          # MUST be 0 errors — this is the real gate
+pnpm build
+npx vitest run                           # 4 known env failures only (see below)
+pnpm format:check                        # CI gate too; a rebase can leave long lines unwrapped
 ```
+
+Do not filter the type-check output to "our" files — the losses described above show up
+in files we don't own (`extract-claude-plugins.ts` erroring because `skill-lock.ts` lost a field).
 
 ### Step 5: Force-push
 
 ```bash
 git push --force-with-lease origin main  # rebase rewrote history — force-push is expected here
 ```
+
+## Releasing & Tagging
+
+### Why our tags are prefixed
+
+Upstream's 41 `v1.x` tags are **ancestors of our history** — rebasing onto `upstream-main`
+puts `v1.5.20` on our first-parent chain. So a bare `git describe --tags --abbrev=0`
+returns `v1.5.20`, not our version:
+
+```bash
+git describe --tags --abbrev=0                      # v1.5.20   ← upstream's, wrong
+git describe --tags --abbrev=0 --match 'skills-v*'  # skills-v0.1.3  ← ours
+```
+
+That silently broke `publish.yml`, which used the bare form to pick the changelog range
+and to scan commits for `[patch]`/`[minor]` markers.
+
+**Our releases are therefore tagged `skills-v<version>`.** `.npmrc` sets
+`tag-version-prefix=skills-v` so `npm version` agrees with CI.
+
+### Rules
+
+- **Never run `git push --tags`** — it would push all 41 upstream tags to `origin`.
+  Push one tag explicitly: `git push origin skills-v0.2.0`.
+- Stop importing new upstream tags: `git config remote.upstream.tagOpt --no-tags`
+  (already-imported local `v1.x` tags are harmless once `--match` is used, and stay
+  useful for referencing upstream releases).
+- Every published npm version must have a `skills-v*` tag. `0.1.3` shipped untagged;
+  the tag was backfilled onto the commit that produced it.
+
+### Realigns orphan old release tags — by design
+
+A realign rebases our patch onto a new upstream base, so the previous `main` commits
+stop being ancestors. Their `skills-v*` tags still resolve (a tag keeps its commit
+alive), but they are no longer on the current history line:
+
+```bash
+git merge-base --is-ancestor skills-v0.1.3 HEAD   # non-zero after a realign
+git describe --tags --abbrev=0 --match 'skills-v*' # empty on the first post-realign release
+```
+
+This is intentional and has two consequences:
+
+1. **Those orphaned tags are the rollback points** for what was actually published.
+   `skills-v0.1.3` is the pre-realign `main`; keep it.
+2. **`publish.yml` handles the empty-describe case** by generating the changelog from
+   `origin/upstream-main..HEAD` — i.e. our patch — instead of walking into upstream's
+   history and reporting their commits as ours. Only the first release after a realign
+   takes that path; later ones describe from the previous `skills-v*` tag normally.
+
+### Cutting a release
+
+```bash
+pnpm type-check && pnpm build && npx vitest run && pnpm format:check  # all gates
+npm version minor                        # writes package.json + creates skills-vX.Y.Z
+git push --force-with-lease origin main
+git push origin skills-vX.Y.Z            # ← this triggers publish.yml → npm publish
+```
+
+`publish.yml` fires only on a `skills-v*` tag push or manual `workflow_dispatch`.
+There is no branch trigger: under this rebase model `main` is force-pushed routinely,
+and a branch trigger would fire on every one.
+
+### Version line
+
+We version **independently of upstream** (`0.x`), because our package is a different
+product with a different audience. Our `0.2.0` containing upstream's `v1.5.20` is
+expected and not a mistake. Bump *minor* when a rebase pulls in a substantial upstream
+range or changes agent behaviour; *patch* for fixes to our own patch.
 
 ## Known environment-only test failures (not our regression)
 

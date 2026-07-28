@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents working on the `skills` CLI code
 
 - [docs/npx-skills-cheatsheet.md](docs/npx-skills-cheatsheet.md) — Native `npx skills` command reference
 - [docs/cheatsheet.md](docs/cheatsheet.md) — Multi-agent sync workflow (import, distribute, extract)
-- [docs/fork-strategy.md](docs/fork-strategy.md) — Branch model and upstream sync (merge-based)
+- [docs/fork-strategy.md](docs/fork-strategy.md) — Branch model, upstream sync (rebase / patch-on-top), and releasing
 
 ## Project Overview
 
@@ -43,7 +43,7 @@ src/
 ├── cli.ts                    # Main entry point, command routing, update logic
 ├── add.ts                    # Core add command logic
 ├── constants.ts              # Shared constants (AGENTS_DIR, SKILLS_SUBDIR)
-├── agents.ts                 # Agent definitions (55 agents), detection, universal/non-universal
+├── agents.ts                 # Agent definitions (74 agents), detection, universal/non-universal
 ├── types.ts                  # TypeScript types (AgentType, Skill, RemoteSkill)
 ├── installer.ts              # Skill installation, symlink/copy, distributeSkillToAgents(), atomic symlink
 ├── skills.ts                 # Skill discovery and SKILL.md parsing
@@ -60,9 +60,15 @@ src/
 ├── sync.ts                   # Sync command - crawl node_modules for skills
 ├── find.ts                   # Find/search command
 ├── list.ts                   # List installed skills command
+├── install.ts                # experimental_install - restore from skills-lock.json
+├── update.ts                 # Update command (extracted from cli.ts upstream)
+├── detect-agent.ts           # Detect the agent env we're running inside
 ├── source-parser.ts          # Parse git URLs, GitHub shorthand, local paths
+├── github-host.ts            # GH_HOST / GitHub Enterprise resolution
 ├── git.ts                    # Git clone operations
-├── telemetry.ts              # Anonymous usage tracking
+├── frontmatter.ts            # SKILL.md YAML frontmatter parsing
+├── plugin-manifest.ts        # Claude plugin manifest discovery
+├── telemetry.ts              # No-op stubs — telemetry removed in this fork
 ├── sanitize.ts               # Output sanitization
 ├── update-source.ts          # Build update URLs for re-installation
 ├── blob.ts                   # GitHub Trees API, blob download
@@ -100,9 +106,14 @@ tests/
 
 ### Universal vs Non-Universal Agents
 
-Universal agents (Codex, Cursor, Gemini CLI, OpenCode, Antigravity) have `skillsDir === '.agents/skills'` — they read the canonical store directly, no symlinks needed.
+Universal agents (17 of 74 — Cursor, OpenCode, Antigravity, Zed, GitHub Copilot, Warp, Amp, Cline, …) have `skillsDir === '.agents/skills'` — they read the canonical store directly, no symlinks needed.
 
-Non-universal agents (Qwen, Kiro, KiloCode, Windsurf, etc.) get per-skill symlinks from their skills dir back to `~/.agents/skills/<name>` via `distribute`.
+Non-universal agents (Codex, Qwen, Kiro, KiloCode, Windsurf, etc.) get per-skill symlinks from their skills dir back to `~/.agents/skills/<name>` via `distribute`.
+
+Two fork-specific deviations from upstream's registry — keep these through rebases:
+
+- **Codex is non-universal here.** Its binary reads `_codex_home()/skills` (`~/.codex/skills`), not the hub, so `skillsDir` is `.codex/skills` and `distribute` must symlink into it. Upstream classes it universal, which silently gave Codex zero hub skills.
+- **`gemini-cli` is removed.** Google deprecated consumer sign-in on 2026-06-18. It is gone from `AgentType`, so any upstream code referencing it (e.g. `detect-agent.ts`'s agent map) must be remapped to `universal` on rebase.
 
 ### Intent/Lock Split
 
@@ -123,22 +134,30 @@ Lock file wipes on version mismatch (v3 → v4 loses upstream `skills add` track
 
 ```bash
 pnpm install           # Install dependencies
-pnpm obuild            # Build (fast, uses obuild)
-pnpm test              # Run all tests
+pnpm build             # Build (obuild)
+pnpm test              # Run all tests (vitest)
 pnpm format            # Format with Prettier
-pnpm type-check        # TypeScript type checking
-pnpm dev <command>     # Run locally via tsx
+pnpm format:check      # Verify formatting (CI gate)
+pnpm type-check        # TypeScript type checking (CI gate)
+pnpm dev <command>     # Run locally from source
 ```
 
-## Publishing
+CI gates both `type-check` and `format:check`, so run them before pushing.
 
-```bash
-# 1. Bump version in package.json
-# 2. Build
-pnpm obuild
-# 3. Publish
-npm publish
-```
+Four test failures are expected locally and are environment-only — they also fail
+on a pristine `upstream-main` checkout:
+
+- `src/detect-agent.test.ts` (3) — Cursor detection, depends on the host agent env
+- `tests/git-lfs-clone.test.ts` (1) — LFS fixture git config
+
+A fifth failure means a real regression.
+
+## Releasing
+
+Releases are cut from tags named **`skills-v<version>`** — never bare `v<version>`,
+which collides with the 41 upstream tags in this repo's history. Never run
+`git push --tags`. Full procedure and rationale:
+[docs/fork-strategy.md](docs/fork-strategy.md#releasing--tagging).
 
 ## Adding a New Agent
 
