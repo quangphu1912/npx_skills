@@ -114,7 +114,7 @@ git push --force-with-lease origin main  # rebase rewrote history — force-push
 
 ### Why our tags are prefixed
 
-Upstream's 41 `v1.x` tags are **ancestors of our history** — rebasing onto `upstream-main`
+Upstream's 39 `v1.x` tags are **ancestors of our history** — rebasing onto `upstream-main`
 puts `v1.5.20` on our first-parent chain. So a bare `git describe --tags --abbrev=0`
 returns `v1.5.20`, not our version:
 
@@ -131,7 +131,7 @@ and to scan commits for `[patch]`/`[minor]` markers.
 
 ### Rules
 
-- **Never run `git push --tags`** — it would push all 41 upstream tags to `origin`.
+- **Never run `git push --tags`** — it would push all 39 upstream tags to `origin`.
   Push one tag explicitly: `git push origin skills-v0.2.0`.
 - Stop importing new upstream tags: `git config remote.upstream.tagOpt --no-tags`
   (already-imported local `v1.x` tags are harmless once `--match` is used, and stay

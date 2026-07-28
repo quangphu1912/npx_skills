@@ -176,7 +176,7 @@ A fifth failure means a real regression.
 ## Releasing
 
 Releases are cut from tags named **`skills-v<version>`** — never bare `v<version>`,
-which collides with the 41 upstream tags in this repo's history. Never run
+which collides with the 39 upstream tags in this repo's history. Never run
 `git push --tags`. Full procedure and rationale:
 [docs/fork-strategy.md](docs/fork-strategy.md#releasing--tagging).
 
