@@ -35,7 +35,7 @@ That's it. No dotfiles, no config files, no setup. Just works.
 **Reference docs:**
 - [docs/npx-skills-cheatsheet.md](docs/npx-skills-cheatsheet.md) — Native `npx skills` command reference
 - [docs/cheatsheet.md](docs/cheatsheet.md) — Multi-agent sync workflow (import, distribute, extract)
-- [docs/fork-strategy.md](docs/fork-strategy.md) — Branch model and upstream sync (merge-based)
+- [docs/fork-strategy.md](docs/fork-strategy.md) — Branch model, upstream sync (rebase / patch-on-top), and releasing
 - [AGENTS.md](AGENTS.md) — Architecture and development guide
 
 ### Skill Consumer — Install from GitHub
