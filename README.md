@@ -380,7 +380,7 @@ Skills can be installed to any of these agents:
 | CodeBuddy | `codebuddy` | `.codebuddy/skills/` | `~/.codebuddy/skills/` |
 | Codemaker | `codemaker` | `.codemaker/skills/` | `~/.codemaker/skills/` |
 | Code Studio | `codestudio` | `.codestudio/skills/` | `~/.codestudio/skills/` |
-| Codex | `codex` | `.agents/skills/` | `~/.codex/skills/` |
+| Codex | `codex` | `.codex/skills/` | `~/.codex/skills/` |
 | Command Code | `command-code` | `.commandcode/skills/` | `~/.commandcode/skills/` |
 | Continue | `continue` | `.continue/skills/` | `~/.continue/skills/` |
 | Cortex Code | `cortex` | `.cortex/skills/` | `~/.snowflake/cortex/skills/` |
@@ -393,7 +393,6 @@ Skills can be installed to any of these agents:
 | Firebender | `firebender` | `.agents/skills/` | `~/.firebender/skills/` |
 | ForgeCode | `forgecode` | `.forge/skills/` | `~/.forge/skills/` |
 | fx | `fx` | `.fx/skills/` | `~/.fx/skills/` |
-| Gemini CLI | `gemini-cli` | `.agents/skills/` | `~/.gemini/skills/` |
 | GitHub Copilot | `github-copilot` | `.agents/skills/` | `~/.copilot/skills/` |
 | Goose | `goose` | `.goose/skills/` | `~/.config/goose/skills/` |
 | Grok Build | `grok` | `.grok/skills/` | `~/.grok/skills/` |
@@ -521,6 +520,7 @@ discover `SKILL.md` files outside these container directories (e.g. under
 - `.codebuddy/skills/`
 - `.codemaker/skills/`
 - `.codestudio/skills/`
+- `.codex/skills/`
 - `.commandcode/skills/`
 - `.continue/skills/`
 - `.cortex/skills/`

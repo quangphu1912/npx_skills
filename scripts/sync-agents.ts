@@ -80,7 +80,11 @@ function generateSkillDiscoveryPaths(): string {
 function generateKeywords(): string[] {
   const baseKeywords = ['cli', 'agent-skills', 'skills', 'ai-agents'];
   const agentKeywords = Object.keys(agents);
-  return [...baseKeywords, ...agentKeywords];
+  // Fork-specific discovery keywords. They are not derived from the agent
+  // registry, so without listing them here this generator (which replaces
+  // pkg.keywords wholesale) silently drops them on every agents.ts change.
+  const extraKeywords = ['skill-migration', 'claude-code-migration', 'agent-migration'];
+  return [...baseKeywords, ...agentKeywords, ...extraKeywords];
 }
 
 function replaceSection(
