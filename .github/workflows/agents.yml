@@ -39,6 +39,10 @@ jobs:
     needs: validate-agents
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Required: this job pushes the regenerated README/package.json back to main.
+    # Without it GITHUB_TOKEN is read-only and `git push` fails with a 403.
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
