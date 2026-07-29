@@ -5,7 +5,7 @@ import { createHash } from 'crypto';
 
 const AGENTS_DIR = '.agents';
 const LOCK_FILE = '.skill-lock.json';
-const CURRENT_VERSION = 4; // Bumped from 3: intent fields (removed/dismissed/lastSelectedAgents) moved to .skill-intent.json
+export const CURRENT_VERSION = 4; // Bumped from 3: intent fields (removed/dismissed/lastSelectedAgents) moved to .skill-intent.json
 
 /**
  * Represents a single installed skill entry in the lock file.
