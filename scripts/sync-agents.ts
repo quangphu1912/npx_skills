@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { fileURLToPath } from 'node:url';
 import { agents } from '../src/agents.ts';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -117,4 +118,7 @@ function main() {
   console.log('package.json updated');
 }
 
-main();
+// Run only when executed directly, not when imported (e.g. by tests).
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}
