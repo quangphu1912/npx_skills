@@ -165,6 +165,19 @@ resolved against lock keys (`resolveSkillsToRemove`). Before that resolution exi
 
 `extract-claude-plugins` reads `enabledPlugins` from `~/.claude/settings.json` and only extracts skills from enabled plugins. Disabled plugins are skipped.
 
+### Fork-deviation invariants
+
+Every fork-specific deviation from upstream is pinned by a behavioral assertion in
+[`tests/fork-invariants.test.ts`](../tests/fork-invariants.test.ts) — Codex's
+non-universal classification, `gemini-cli`'s removal, telemetry being disabled,
+lock-key resolution, the fork keywords, `pluginVersion`, Antigravity staying
+universal, and the `detect-agent.ts` gemini remap. A rebase can silently drop any
+of these with no conflict marker; this suite is the only detector. **If you change
+a fork-specific behavior, expect this test to fail — update it deliberately, never
+delete an assertion just to go green** (see the file header for the restore-or-retire
+rule). It runs in `pnpm fork:verify`; the cold-memory sync checklist is
+[`docs/rebase-procedure.md`](docs/rebase-procedure.md).
+
 ## Development
 
 ```bash
@@ -174,6 +187,8 @@ pnpm test              # Run all tests (vitest)
 pnpm format            # Format with Prettier
 pnpm format:check      # Verify formatting (CI gate)
 pnpm type-check        # TypeScript type checking (CI gate)
+pnpm fork:verify       # type-check + build + tests + format — the must-be-green gate before any force-push
+pnpm fork:check-drift  # step 0 of an upstream sync: did the conflict files move?
 pnpm dev <command>     # Run locally from source
 ```
 
@@ -185,7 +200,9 @@ on a pristine `upstream-main` checkout:
 - `src/detect-agent.test.ts` (3) — Cursor detection, depends on the host agent env
 - `tests/git-lfs-clone.test.ts` (1) — LFS fixture git config
 
-A fifth failure means a real regression.
+A fifth failure means a real regression. `pnpm fork:verify` excludes those two
+files so the gate is a clean green signal locally; CI's full `pnpm test` is the
+backstop (those 4 pass on CI's clean env).
 
 ## Releasing
 

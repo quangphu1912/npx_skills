@@ -89,8 +89,14 @@ surfaced via `pnpm type-check`:
   `extract-claude-plugins` for staleness detection.
 - `setDetectedAgent` in `src/telemetry.ts` — the stub upstream's `detect-agent.ts` imports.
 
-**`pnpm type-check` is the detector for this class of loss. Treat it as the gate,
-not the test suite** — the tests passed while all four type errors were live.
+**Type-check catches *typed* drops** (a missing field or import fails to compile),
+but it cannot catch *behavioral* deviations — Codex's non-universal classification,
+telemetry being disabled, the `detect-agent.ts` gemini remap — which are valid
+TypeScript either way. Those are pinned in
+[`tests/fork-invariants.test.ts`](../tests/fork-invariants.test.ts), one behavioral
+assertion per deviation, each mutation-verified to fail on revert. **`pnpm fork:verify`
+(type-check + build + the invariant suite + format) is the gate that catches both
+classes** — run it after every rebase, before any force-push.
 
 ### Step 4: Test
 
