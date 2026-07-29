@@ -95,14 +95,13 @@ not the test suite** — the tests passed while all four type errors were live.
 ### Step 4: Test
 
 ```bash
-pnpm type-check                          # MUST be 0 errors — this is the real gate
-pnpm build
-npx vitest run                           # 4 known env failures only (see below)
-pnpm format:check                        # CI gate too; a rebase can leave long lines unwrapped
+pnpm fork:verify     # type-check + build + tests + format — the must-be-green gate
 ```
 
 Do not filter the type-check output to "our" files — the losses described above show up
 in files we don't own (`extract-claude-plugins.ts` erroring because `skill-lock.ts` lost a field).
+
+See `docs/rebase-procedure.md` for the full cold-memory checklist.
 
 ### Step 5: Force-push
 

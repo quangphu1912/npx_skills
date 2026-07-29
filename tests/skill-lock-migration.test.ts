@@ -3,8 +3,9 @@ import { mkdtemp, mkdir, rm, writeFile, readFile, access } from 'node:fs/promise
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// CURRENT_VERSION constants (mirrored from source so tests remain explicit)
-const SKILL_LOCK_CURRENT_VERSION = 4;
+import { CURRENT_VERSION as SKILL_LOCK_CURRENT_VERSION } from '../src/skill-lock.ts';
+
+// local-lock version; mirror kept until local-lock exports its version constant.
 const LOCAL_LOCK_CURRENT_VERSION = 1;
 
 // ---------------------------------------------------------------------------
