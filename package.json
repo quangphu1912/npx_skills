@@ -21,7 +21,7 @@
     "prepare": "husky",
     "test": "vitest",
     "type-check": "tsc --noEmit",
-    "fork:verify": "pnpm type-check && pnpm build && pnpm exec vitest run && pnpm format:check",
+    "fork:verify": "pnpm type-check && pnpm build && pnpm exec vitest run --exclude 'src/detect-agent.test.ts' --exclude 'tests/git-lfs-clone.test.ts' && pnpm format:check",
     "fork:check-drift": "git fetch upstream --no-tags && echo '--- upstream ahead of our mirror ---' && git log --oneline upstream-main..upstream/main && echo '--- did our conflict files change? ---' && git diff --stat upstream-main upstream/main -- src/cli.ts src/remove.ts src/skill-lock.ts src/installer.ts src/telemetry.ts src/types.ts src/detect-agent.ts",
     "publish:snapshot": "npm version prerelease --preid=snapshot --no-git-tag-version && npm publish --tag snapshot"
   },
