@@ -344,7 +344,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         const lockEntry = await getSkillFromLock(skillName);
         effectiveSource = lockEntry?.source || 'local';
         effectiveSourceType = lockEntry?.sourceType || 'local';
-        if (!isStillUsed) {
+        if (!isStillUsed && !dryRun) {
           await removeSkillFromLock(skillName);
           if (canonicalDeleted) {
             await addToRemoved(skillName, effectiveSource);
@@ -355,7 +355,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         const lockEntry = localLock.skills[skillName];
         effectiveSource = lockEntry?.source || 'local';
         effectiveSourceType = lockEntry?.sourceType || 'local';
-        if (!isStillUsed) {
+        if (!isStillUsed && !dryRun) {
           await removeSkillFromLocalLock(skillName, cwd);
           if (canonicalDeleted) {
             await addToRemoved(skillName, effectiveSource);

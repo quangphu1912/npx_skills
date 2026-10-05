@@ -88,10 +88,14 @@ surfaced via `pnpm type-check`:
 - `SkillLockEntry.pluginVersion` in `src/skill-lock.ts` — our field, used by
   `extract-claude-plugins` for staleness detection.
 - `setDetectedAgent` in `src/telemetry.ts` — the stub upstream's `detect-agent.ts` imports.
+- The `!dryRun` half of `if (!isStillUsed && !dryRun)` around the two lock/intent writes in
+  `src/remove.ts`. The v1.7.0 realign resolved that conflict to upstream's `if (!isStillUsed)`,
+  so `remove --dry-run` deleted the lock entry and recorded the skill as removed. Type-check
+  cannot see this one; `tests/remove-dry-run.test.ts` now pins it.
 
 **Type-check catches *typed* drops** (a missing field or import fails to compile),
-but it cannot catch *behavioral* deviations — Codex's non-universal classification,
-telemetry being disabled, the `detect-agent.ts` gemini remap — which are valid
+but it cannot catch *behavioral* deviations — telemetry being disabled, the
+`detect-agent.ts` gemini remap — which are valid
 TypeScript either way. Those are pinned in
 [`tests/fork-invariants.test.ts`](../tests/fork-invariants.test.ts), one behavioral
 assertion per deviation, each mutation-verified to fail on revert. **`pnpm fork:verify`
