@@ -117,7 +117,13 @@ See `docs/rebase-procedure.md` for the full cold-memory checklist.
 
 ```bash
 git push --force-with-lease origin main  # rebase rewrote history — force-push is expected here
+git push origin upstream-main            # keep the mirror current — see below
 ```
+
+The `upstream-main` push matters: `publish.yml`'s changelog fallback reads
+`origin/upstream-main`, and a stale mirror makes that range walk upstream's
+history. After the 2026-10 v1.7.0 realign the mirror was left at an ancient
+commit; push it as part of every realign.
 
 ## Releasing & Tagging
 
@@ -165,17 +171,60 @@ This is intentional and has two consequences:
    `skills-v0.1.3` is the pre-realign `main`; keep it.
 2. **`publish.yml` handles the empty-describe case** by generating the changelog from
    `origin/upstream-main..HEAD` — i.e. our patch — instead of walking into upstream's
-   history and reporting their commits as ours. Only the first release after a realign
-   takes that path; later ones describe from the previous `skills-v*` tag normally.
+   history and reporting their commits as ours. That only holds while the
+   `origin/upstream-main` mirror is current (push it as part of the realign — Step 5);
+   after the v1.7.0 realign it was left stale and the fallback would have listed
+   upstream commits as ours. Only the first release after a realign takes that
+   path; later ones describe from the previous `skills-v*` tag normally.
 
 ### Cutting a release
 
+**`publish.yml` has never successfully published.** It authenticates with
+`secrets.NPM_TOKEN`, the repo has no such secret, and the npm account uses 2FA
+with an authenticator (no long-lived token). Every `skills-v*` tag push so far
+has failed at the npm step with `ENEEDAUTH`; every version on npm was published
+manually. Until a granular npm token is added to the secrets (or npm *trusted
+publishing* is configured on npmjs.com for this repo + `publish.yml`, which
+already holds `id-token: write`), releases are **manual**:
+
 ```bash
-pnpm type-check && pnpm build && npx vitest run && pnpm format:check  # all gates
-npm version minor                        # writes package.json + creates skills-vX.Y.Z
-git push --force-with-lease origin main
-git push origin skills-vX.Y.Z            # ← this triggers publish.yml → npm publish
+pnpm fork:verify                           # type-check + build + tests + format
+
+# 1. Version + tag. The realign commit usually pre-bumps package.json — if it
+#    already carries the target version, tag directly (npm version would bump
+#    again); otherwise `npm version minor` writes package.json AND creates the
+#    skills-v* tag (.npmrc's tag-version-prefix keeps the prefix).
+git tag -a skills-vX.Y.Z -m "skills-vX.Y.Z: <one-line summary>"
+
+git push --force-with-lease origin main    # plain push if history wasn't rewritten
+git push origin skills-vX.Y.Z              # fires publish.yml — expect it to fail
+                                           # at the npm step; that noise is harmless
+
+# 2. Publish from the tag commit (interactive — run these yourself):
+git checkout skills-vX.Y.Z
+npm login                                  # browser flow
+npm publish --access public --otp=<6-digit>  # npm no longer prompts for the OTP
+                                             # in-terminal; pass it explicitly
+git checkout main
+
+# 3. GitHub Release — publish.yml never gets that far, so create it manually.
+#    Changelog = the fork patch (NOT skills-v0.2.0..HEAD, which walks into
+#    upstream's history after a realign):
+git log upstream-main..HEAD --format='- %s' --no-merges
+gh release create skills-vX.Y.Z --title "skills-vX.Y.Z" --notes-file <file>
 ```
+
+Operational notes:
+
+- `prepublishOnly` builds automatically. The tarball ships only `dist/`, `bin/`,
+  `README.md` (`files` in package.json), so a test- or docs-only commit after the
+  tag does not change what is published and never needs a retag — that is why
+  the Windows CI fix `8b8fde0` sits one commit *after* `skills-v0.3.0` on purpose.
+- Manual publishes carry no provenance attestation (`--provenance` requires
+  CI's OIDC identity).
+- `npm login` sessions expire between releases (`npm whoami` → 401); log in again
+  when needed. The 6-digit code is a one-time OTP, not a credential — it cannot
+  be stored in `NPM_TOKEN`, which is why the workflow path stays broken.
 
 `publish.yml` fires only on a `skills-v*` tag push or manual `workflow_dispatch`.
 There is no branch trigger: under this rebase model `main` is force-pushed routinely,
