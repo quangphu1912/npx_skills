@@ -325,7 +325,7 @@ description: Shared install path regression test
     mkdirSync(projectDir, { recursive: true });
 
     const result = runCli(
-      ['add', sourceDir, '-y', '--agent', 'opencode', 'cursor', 'cline'],
+      ['add', sourceDir, '-y', '--agent', 'codex', 'cursor', 'cline'],
       projectDir
     );
 
@@ -354,7 +354,7 @@ description: Mixed copied destination regression test
     mkdirSync(projectDir, { recursive: true });
 
     const result = runCli(
-      ['add', sourceDir, '-y', '--copy', '--agent', 'opencode', 'cursor', 'openclaw'],
+      ['add', sourceDir, '-y', '--copy', '--agent', 'codex', 'cursor', 'openclaw'],
       projectDir
     );
 
@@ -470,7 +470,7 @@ description: Amazon DynamoDB skill
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Selected 1 skill: amazon-dynamodb');
-    expect(existsSync(join(projectDir, '.codex', 'skills', 'amazon-dynamodb', 'SKILL.md'))).toBe(
+    expect(existsSync(join(projectDir, '.agents', 'skills', 'amazon-dynamodb', 'SKILL.md'))).toBe(
       true
     );
   });

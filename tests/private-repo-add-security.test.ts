@@ -132,7 +132,7 @@ describe('private repository installs', () => {
     });
 
     await expect(
-      readFile(join(project, '.codex', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
+      readFile(join(project, '.agents', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
     ).resolves.toContain('private-skill');
     expect(execSync).not.toHaveBeenCalled();
     expect(execFile).toHaveBeenCalled();
@@ -183,7 +183,7 @@ describe('private repository installs', () => {
 
     expect(cloneRepo).toHaveBeenCalledWith(source, undefined);
     await expect(
-      readFile(join(project, '.codex', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
+      readFile(join(project, '.agents', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
     ).resolves.toContain('private-skill');
 
     const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input));

@@ -38,14 +38,13 @@ import type { SkillLockEntry } from '../src/skill-lock.ts';
 import * as telemetry from '../src/telemetry.ts';
 
 describe('fork invariants', () => {
-  describe('Codex is non-universal [pending-upstream]', () => {
-    // WHY: Codex's binary reads ~/.codex/skills, not the hub. Upstream classes
-    // it universal, which silently gives Codex zero hub skills.
-    // Upstream link: <fill in when PR is opened — Task 7>
-    it('isUniversalAgent(codex) is false', () => {
-      expect(isUniversalAgent('codex')).toBe(false);
-    });
-  });
+  // RETIRED 2026-10-05 — 'Codex is non-universal [pending-upstream]'.
+  // Rationale: the deviation is no longer needed, so Codex follows upstream's
+  // universal classification again. Codex reads ~/.agents/skills natively
+  // (openai/codex#10437; `$CODEX_HOME/skills` is its deprecated fallback).
+  // Verified on Codex 0.160.0: `codex debug prompt-input` with an empty
+  // CODEX_HOME listed every hub skill. The original belief came from the
+  // bundled skill-installer helper (`_codex_home()`), not Codex's loader.
 
   describe('gemini-cli removed [permanent]', () => {
     // WHY: Google deprecated consumer sign-in 2026-06-18; the agent is gone.
@@ -55,9 +54,9 @@ describe('fork invariants', () => {
   });
 
   describe('Antigravity stays universal [permanent]', () => {
-    // WHY: skillsDir/globalSkillsDir mismatch looks like the Codex bug but
-    // isn't — Antigravity has no skill system (verified via app.asar). Leaving
-    // it universal means distribute skips it, which is correct.
+    // WHY: its skillsDir/globalSkillsDir mismatch looks like a misclassification
+    // but isn't — Antigravity has no skill system (verified via app.asar).
+    // Leaving it universal means distribute skips it, which is correct.
     it('isUniversalAgent(antigravity) is true', () => {
       expect(isUniversalAgent('antigravity')).toBe(true);
     });

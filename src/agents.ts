@@ -224,7 +224,7 @@ export const agents: Record<AgentType, AgentConfig> = {
   codex: {
     name: 'codex',
     displayName: 'Codex',
-    skillsDir: '.codex/skills',
+    skillsDir: '.agents/skills',
     globalSkillsDir: join(codexHome, 'skills'),
     detectInstalled: async () => {
       return existsSync(codexHome) || existsSync('/etc/codex');

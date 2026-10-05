@@ -104,23 +104,32 @@ tests/
 
 ### Universal vs Non-Universal Agents
 
-Universal agents (17 of 74 — Cursor, OpenCode, Antigravity, Zed, GitHub Copilot, Warp, Amp, Cline, …) have `skillsDir === '.agents/skills'` — they read the canonical store directly, no symlinks needed.
+Universal agents (Cursor, OpenCode, Codex, Droid, Kilo Code, Antigravity, Zed, GitHub Copilot, Warp, Amp, Cline, …) have `skillsDir === '.agents/skills'` — they read the canonical store directly, no symlinks needed.
 
-Non-universal agents (Codex, Qwen, Kiro, KiloCode, Windsurf, etc.) get per-skill symlinks from their skills dir back to `~/.agents/skills/<name>` via `distribute`.
+Non-universal agents (Qwen, Kiro, Windsurf, ForgeCode, etc.) get per-skill symlinks from their skills dir back to `~/.agents/skills/<name>` via `distribute`.
 
-Two fork-specific deviations from upstream's registry — keep these through rebases:
+One fork-specific deviation from upstream's registry — keep it through rebases:
 
-- **Codex is non-universal here.** Its binary reads `_codex_home()/skills` (`~/.codex/skills`), not the hub, so `skillsDir` is `.codex/skills` and `distribute` must symlink into it. Upstream classes it universal, which silently gave Codex zero hub skills.
 - **`gemini-cli` is removed.** Google deprecated consumer sign-in on 2026-06-18. It is gone from `AgentType`, so any upstream code referencing it (e.g. `detect-agent.ts`'s agent map) must be remapped to `universal` on rebase.
 
-**Do not reclassify Antigravity the way Codex was reclassified.** It looks like the same
-bug — classed universal (`.agents/skills`) while `globalSkillsDir` points at
-`~/.gemini/antigravity/skills` — but the two cases differ. Codex genuinely reads
-`_codex_home()/skills`, so reclassifying delivered skills to it. Antigravity has **no skill
-system at all** (verified 2026-07-26 by inspecting `app.asar`: zero `skill` strings), so
-its `globalSkillsDir` is fictional. Leaving it universal means `distribute` skips it, which
-is the correct outcome; reclassifying would only scatter symlinks into a directory nothing
-reads.
+**Codex follows upstream again (universal) as of 2026-10-05.** The fork used to class it
+non-universal on the belief that it only reads `~/.codex/skills`. That belief came from the
+bundled skill-installer helper script (`_codex_home()`), not Codex's loader. Codex reads
+`~/.agents/skills` natively (openai/codex#10437; `$CODEX_HOME/skills` is its deprecated
+fallback) — verified on 0.160.0 by rendering its prompt with an empty `CODEX_HOME`. Droid
+0.233.0 and Kilo 7.8.3 were verified the same way: each lists every hub skill from a home
+directory that contains nothing but `.agents/skills`.
+
+**Verify a classification by running the tool, not by reading a mismatch.** Give it a home
+directory that holds only `.agents/skills` and ask it to list skills; a helper script or a
+`skillsDir`/`globalSkillsDir` mismatch is not evidence.
+
+**Do not reclassify Antigravity as non-universal.** It is classed universal
+(`.agents/skills`) while `globalSkillsDir` points at `~/.gemini/antigravity/skills`, which
+looks like a misclassification, but Antigravity has **no skill system at all** (verified
+2026-07-26 by inspecting `app.asar`: zero `skill` strings), so its `globalSkillsDir` is
+fictional. Leaving it universal means `distribute` skips it, which is the correct outcome;
+reclassifying would only scatter symlinks into a directory nothing reads.
 
 `isUniversalAgent()` keys solely on `skillsDir === '.agents/skills'`, so a
 `skillsDir`/`globalSkillsDir` mismatch is a *signal to verify the tool*, never on its own a

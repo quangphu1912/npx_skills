@@ -12,7 +12,7 @@ Moving from Claude Code to Cursor? Trying Codex? Don't leave your skills behind.
 [![npm downloads](https://img.shields.io/npm/dw/@phu-le/skills)](https://npmjs.com/package/@phu-le/skills)
 
 <!-- agent-list:start -->
-Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [75 more](#supported-agents).
+Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [74 more](#supported-agents).
 <!-- agent-list:end -->
 
 ## Quick Start
@@ -59,7 +59,7 @@ skills distribute -g -y                        # fan out to all non-universal ag
 skills remove standards-go -g -y              # remove (source untouched, tracked in intent)
 ```
 
-Universal agents (Cursor, OpenCode, Cline, GitHub Copilot, etc.) share `~/.agents/skills/` directly — no symlinks needed. Non-universal agents (Codex, Qwen, Kiro, KiloCode, Windsurf) get per-skill symlinks via `distribute`. Claude Code is excluded from distribute since it's typically the skill source.
+Universal agents (Cursor, OpenCode, Codex, Droid, Kilo Code, Cline, GitHub Copilot, etc.) share `~/.agents/skills/` directly — no symlinks needed. Non-universal agents (Qwen, Kiro, Windsurf, ForgeCode, etc.) get per-skill symlinks via `distribute`. Claude Code is excluded from distribute since it's typically the skill source.
 
 ### Skill Author — Create Your Own
 
@@ -380,7 +380,7 @@ Skills can be installed to any of these agents:
 | CodeBuddy | `codebuddy` | `.codebuddy/skills/` | `~/.codebuddy/skills/` |
 | Codemaker | `codemaker` | `.codemaker/skills/` | `~/.codemaker/skills/` |
 | Code Studio | `codestudio` | `.codestudio/skills/` | `~/.codestudio/skills/` |
-| Codex | `codex` | `.codex/skills/` | `~/.codex/skills/` |
+| Codex | `codex` | `.agents/skills/` | `~/.codex/skills/` |
 | Command Code | `command-code` | `.commandcode/skills/` | `~/.commandcode/skills/` |
 | Continue | `continue` | `.continue/skills/` | `~/.continue/skills/` |
 | Cortex Code | `cortex` | `.cortex/skills/` | `~/.snowflake/cortex/skills/` |
@@ -520,7 +520,6 @@ discover `SKILL.md` files outside these container directories (e.g. under
 - `.codebuddy/skills/`
 - `.codemaker/skills/`
 - `.codestudio/skills/`
-- `.codex/skills/`
 - `.commandcode/skills/`
 - `.continue/skills/`
 - `.cortex/skills/`
