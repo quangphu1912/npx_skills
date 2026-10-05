@@ -8,13 +8,19 @@ import { runImport } from '../src/import-skills.ts';
 describe('import --name is sanitized', () => {
   let root: string;
   let oldHome: string | undefined;
+  let oldUserProfile: string | undefined;
   let oldXdg: string | undefined;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'import-name-'));
     oldHome = process.env.HOME;
+    oldUserProfile = process.env.USERPROFILE;
     oldXdg = process.env.XDG_STATE_HOME;
+    // os.homedir() reads HOME on POSIX and USERPROFILE on Windows — set both,
+    // like createTestHomeEnvironment(), or the Windows run writes to the
+    // runner's real home and this test reads a store that was never created.
     process.env.HOME = root;
+    process.env.USERPROFILE = root;
     process.env.XDG_STATE_HOME = join(root, '.state');
     const src = join(root, 'src-skill');
     await mkdir(src, { recursive: true });
@@ -23,6 +29,7 @@ describe('import --name is sanitized', () => {
 
   afterEach(async () => {
     process.env.HOME = oldHome;
+    process.env.USERPROFILE = oldUserProfile;
     process.env.XDG_STATE_HOME = oldXdg;
     await rm(root, { recursive: true, force: true });
   });
