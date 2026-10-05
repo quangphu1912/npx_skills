@@ -303,12 +303,12 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
       // agent-specific remove leaves the master copy intact for the remaining agents.
       const isFullRemove = !options.agent || options.agent.length === 0;
 
+      let isStillUsed = !isFullRemove;
       let canonicalDeleted = false;
       if (isFullRemove) {
         const installedAgents = await detectInstalledAgents();
         const remainingAgents = installedAgents.filter((a) => !targetAgents.includes(a));
 
-        let isStillUsed = false;
         for (const agentKey of remainingAgents) {
           const path = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
           const exists = await lstat(path).catch(() => null);

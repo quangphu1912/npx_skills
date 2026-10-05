@@ -48,4 +48,4 @@ not SHA.
 
 ## Currently rebased on
 
-`v1.5.20` — update this line on every sync.
+`v1.7.0` at upstream merge commit `18f96ea` — update this line on every sync.

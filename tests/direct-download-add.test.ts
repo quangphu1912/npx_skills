@@ -150,7 +150,7 @@ describe('direct download add', () => {
     });
 
     await expect(
-      readFile(join(project, '.agents', 'skills', 'direct-skill', 'SKILL.md'), 'utf-8')
+      readFile(join(project, '.codex', 'skills', 'direct-skill', 'SKILL.md'), 'utf-8')
     ).resolves.toContain('# Direct skill');
     expect(existsSync(join(project, 'skills-lock.json'))).toBe(false);
   });

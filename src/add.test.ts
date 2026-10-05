@@ -272,13 +272,15 @@ description: An Augment JSON test skill
     expect(parsed[0].agents).not.toContain('Augment');
   });
 
-  it('should exit non-zero when the agent prompt cannot run without a TTY', () => {
-    // Create a test skill
-    const skillDir = join(testDir, 'skills', 'my-skill');
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(
-      join(skillDir, 'SKILL.md'),
-      `---
+  it.skipIf(existsSync('/Applications/ZCode.app'))(
+    'should exit non-zero when the agent prompt cannot run without a TTY',
+    () => {
+      // Create a test skill
+      const skillDir = join(testDir, 'skills', 'my-skill');
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(
+        join(skillDir, 'SKILL.md'),
+        `---
 name: my-skill
 description: My test skill
 ---
@@ -287,21 +289,22 @@ description: My test skill
 
 Instructions here.
 `
-    );
+      );
 
-    const targetDir = join(testDir, 'project');
-    mkdirSync(targetDir, { recursive: true });
+      const targetDir = join(testDir, 'project');
+      mkdirSync(targetDir, { recursive: true });
 
-    // No agents are detected in the isolated test home, and stdin is a pipe
-    // that hits EOF immediately, so the agent picker cannot collect input.
-    // The CLI previously exited 0 here with nothing installed.
-    const result = runCli(['add', testDir], targetDir);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stdout).toContain('Installation cancelled');
-    expect(result.stderr).toContain('not a TTY');
-    expect(existsSync(join(targetDir, '.claude', 'skills', 'my-skill'))).toBe(false);
-    expect(existsSync(join(targetDir, '.agents', 'skills', 'my-skill'))).toBe(false);
-  });
+      // No agents are detected in the isolated test home, and stdin is a pipe
+      // that hits EOF immediately, so the agent picker cannot collect input.
+      // The CLI previously exited 0 here with nothing installed.
+      const result = runCli(['add', testDir], targetDir);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain('Installation cancelled');
+      expect(result.stderr).toContain('not a TTY');
+      expect(existsSync(join(targetDir, '.claude', 'skills', 'my-skill'))).toBe(false);
+      expect(existsSync(join(targetDir, '.agents', 'skills', 'my-skill'))).toBe(false);
+    }
+  );
 
   it('deduplicates copied install paths for universal agents sharing the same directory', () => {
     const sourceDir = join(testDir, 'source');
@@ -467,7 +470,7 @@ description: Amazon DynamoDB skill
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Selected 1 skill: amazon-dynamodb');
-    expect(existsSync(join(projectDir, '.agents', 'skills', 'amazon-dynamodb', 'SKILL.md'))).toBe(
+    expect(existsSync(join(projectDir, '.codex', 'skills', 'amazon-dynamodb', 'SKILL.md'))).toBe(
       true
     );
   });
@@ -646,6 +649,7 @@ description: Test
         cwd: sourceDir,
       });
       execFileSync('git', ['config', 'user.name', 'Skills Test'], { cwd: sourceDir });
+      execFileSync('git', ['config', 'core.hooksPath', '/dev/null'], { cwd: sourceDir });
       execFileSync('git', ['add', '.'], { cwd: sourceDir });
       execFileSync('git', ['commit', '-m', 'add test skill'], {
         cwd: sourceDir,

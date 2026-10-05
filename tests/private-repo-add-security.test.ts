@@ -132,7 +132,7 @@ describe('private repository installs', () => {
     });
 
     await expect(
-      readFile(join(project, '.agents', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
+      readFile(join(project, '.codex', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
     ).resolves.toContain('private-skill');
     expect(execSync).not.toHaveBeenCalled();
     expect(execFile).toHaveBeenCalled();
@@ -170,7 +170,7 @@ describe('private repository installs', () => {
     expect(requestedUrls.some((url) => url.startsWith('https://add-skill.vercel.sh/'))).toBe(false);
   });
 
-  it('installs from another Git host and preserves opted-in non-GitHub telemetry', async () => {
+  it('installs from another Git host without telemetry', async () => {
     delete process.env.DISABLE_TELEMETRY;
     const source = 'git@gitlab.com:company/platform/private-skills.git';
 
@@ -183,12 +183,12 @@ describe('private repository installs', () => {
 
     expect(cloneRepo).toHaveBeenCalledWith(source, undefined);
     await expect(
-      readFile(join(project, '.agents', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
+      readFile(join(project, '.codex', 'skills', 'private-skill', 'SKILL.md'), 'utf-8')
     ).resolves.toContain('private-skill');
 
     const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input));
     expect(requestedUrls.some((url) => url.startsWith('https://add-skill.vercel.sh/t?'))).toBe(
-      true
+      false
     );
     expect(requestedUrls.some((url) => url.startsWith('https://add-skill.vercel.sh/audit?'))).toBe(
       false

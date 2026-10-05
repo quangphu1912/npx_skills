@@ -40,11 +40,7 @@ import {
   type WellKnownSkill,
 } from './providers/index.ts';
 import { downloadSource } from './download-source.ts';
-import {
-  addSkillToLock,
-  fetchSkillFolderHash,
-  getGitHubToken,
-} from './skill-lock.ts';
+import { addSkillToLock, fetchSkillFolderHash, getGitHubToken } from './skill-lock.ts';
 import {
   isPromptDismissed,
   dismissPrompt,
